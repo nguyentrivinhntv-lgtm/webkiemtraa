@@ -1,7 +1,11 @@
 import axios from 'axios';
 
-// Use relative URL so it works seamlessly in both dev (via proxy) and production
-const API_BASE = '/api';
+// If deployed separately, read VITE_API_URL (e.g., https://webkiemtra-backend.onrender.com/api)
+// If running locally or unified, fallback to relative '/api'
+const rawApiUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.trim() : '';
+const API_BASE = rawApiUrl
+  ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl.replace(/\/+$/, '')}/api`)
+  : '/api';
 
 const api = axios.create({
   baseURL: API_BASE,
