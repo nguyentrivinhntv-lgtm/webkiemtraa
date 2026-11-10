@@ -19,7 +19,26 @@ Skill này quy định toàn bộ tiêu chuẩn kiến trúc, quy tắc phân t�
 | **Frontend** | React (Vite) + Bootstrap 5 + React Icons + React-Toastify | SPA hiện đại, responsive mobile & desktop, component-based |
 | **Backend** | Node.js + Express 5 + Multer + Mammoth.js | REST API, xử lý upload docx, phân tích cú pháp, chấm điểm |
 | **Lưu trữ** | JSON Storage (`data/quizzes.json`) | Nhẹ, dễ backup, không phụ thuộc service ngoài |
-| **Cổng kết nối** | Port 3001 (Backend) & Port 3000 (Vite Dev Server) | Production: Express phục vụ cả API và React bundle (`client/dist`) |
+| **Cổng kết nối** | Port 3001 (Backend) & Port 3000 (Vite Dev Server) | Độc lập: Frontend gọi Backend qua biến `VITE_API_URL` |
+
+---
+
+## 🌐 2. Chuẩn Tách Riêng Backend & Frontend
+
+Hệ thống được thiết kế theo chuẩn tách biệt (Decoupled Fullstack):
+
+1. **Backend (API Service)**:
+   - Root directory (`server.js`, `routes/`, `data/`, `utils/`).
+   - Cung cấp toàn bộ REST API (`/api/quiz`, `/api/upload`).
+   - Cấu hình CORS mở (`cors()`) nhận request từ mọi domain của Frontend.
+   - Khi truy cập trực tiếp URL backend trả về JSON health check trạng thái online.
+
+2. **Frontend (React Vite SPA)**:
+   - Thư mục `client/`.
+   - Đọc biến môi trường `VITE_API_URL` trong `client/src/services/api.js`.
+   - Khi có `VITE_API_URL`: tự động gọi trực tiếp domain backend.
+   - Khi không có `VITE_API_URL` (local dev): fallback về relative path `/api` qua proxy.
+   - Đã tích hợp sẵn `client/vercel.json` và cấu hình rewrite SPA `/* -> /index.html` cho Render Static Site / Vercel.
 
 ---
 
