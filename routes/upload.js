@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { parseWordFile } = require('../utils/wordParser');
+const { parseWordFile, parseText } = require('../utils/wordParser');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -64,6 +64,35 @@ router.post('/', upload.single('wordFile'), async (req, res) => {
   } catch (err) {
     console.error('Upload error:', err);
     res.status(500).json({ error: 'Lỗi xử lý file: ' + err.message });
+  }
+});
+
+// POST /api/upload/text - Parse raw text pasted by user
+router.post('/text', (req, res) => {
+  try {
+    const { text, title } = req.body;
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Vui lòng dán nội dung câu hỏi!' });
+    }
+
+    const parsed = parseText(text);
+    if (title && title.trim()) {
+      parsed.title = title.trim();
+    }
+
+    if (!parsed || parsed.totalQuestions === 0) {
+      return res.status(400).json({
+        error: 'Không tìm thấy câu hỏi hợp lệ. Định dạng mẫu: 1. Câu hỏi? A. ... B. ... C. ... D. ...'
+      });
+    }
+
+    res.json({
+      success: true,
+      preview: parsed
+    });
+  } catch (err) {
+    console.error('Parse text error:', err);
+    res.status(500).json({ error: 'Lỗi phân tích văn bản: ' + err.message });
   }
 });
 

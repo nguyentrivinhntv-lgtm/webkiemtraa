@@ -21,6 +21,10 @@ export const uploadWordFile = (file) => {
   });
 };
 
+export const parseTextQuestions = (text, title) => {
+  return api.post('/upload/text', { text, title });
+};
+
 export const confirmQuiz = (quizData, settings) => {
   return api.post('/upload/confirm', { quizData, settings });
 };

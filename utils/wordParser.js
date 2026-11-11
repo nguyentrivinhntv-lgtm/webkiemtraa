@@ -300,4 +300,13 @@ function extractDocumentTitle(rawText) {
   return 'Bài kiểm tra trắc nghiệm';
 }
 
-module.exports = { parseWordFile };
+function parseText(rawText) {
+  const isReading = /^[ \t]*(?:READING|PASSAGE|BÀI\s*ĐỌC)\s+\d+/im.test(rawText);
+  if (isReading) {
+    return parseReadingComprehension(rawText, '');
+  } else {
+    return parseMultipleChoice(rawText, '');
+  }
+}
+
+module.exports = { parseWordFile, parseText };
