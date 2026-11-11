@@ -90,6 +90,13 @@ Hệ thống được thiết kế theo chuẩn tách biệt (Decoupled Fullstac
 ### 🚨 Ràng buộc 5: API Base URL Ở Client
 - Không hardcode `http://localhost:3001/api`. Luôn dùng relative path `/api` kết hợp Vite proxy để tương thích mọi môi trường (local, mạng LAN, production).
 
+### 🚨 Ràng buộc 6: Tối Ưu Hóa Giao Diện Điện Thoại (Mobile First)
+- **Menu điều hướng**: Không dùng thuộc tính `data-bs-toggle="collapse"` của Bootstrap thuần (vốn yêu cầu thư viện JS ngoài). Phải điều khiển trạng thái mở/đóng bằng React State (`useState`).
+- **Thanh điều hướng dưới đáy (Mobile Bottom Bar)**: Luôn trang bị thanh điều hướng cố định dưới màn hình trên mobile với 2 nút chuyển đổi nhanh (Trang chủ & Quản lý).
+- **Chọn file trên điện thoại**: Thuộc tính `accept` của thẻ file input phải chứa đầy đủ MIME type:
+  `accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"` để trình duyệt Android/iOS không bị vô hiệu hóa chọn file.
+- **Hỗ trợ Dán Trực Tiếp (Copy/Paste)**: Cung cấp thêm tab dán văn bản câu hỏi trực tiếp để người dùng điện thoại có thể copy từ Zalo, Word, Notes mà không cần lục tìm vị trí lưu file `.docx`.
+
 ---
 
 ## 📄 3. Tiêu Chuẩn Parse File Word (.docx)
