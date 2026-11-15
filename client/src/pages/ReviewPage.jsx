@@ -29,6 +29,7 @@ function ReviewPage() {
   const [showPassage, setShowPassage] = useState(true)
   const [bookmarkedSet, setBookmarkedSet] = useState(new Set())
   const [savedResumeInfo, setSavedResumeInfo] = useState(null)
+  const [speechRate, setSpeechRate] = useState(1.0)
 
   useEffect(() => {
     loadQuiz()
@@ -187,6 +188,7 @@ function ReviewPage() {
     window.speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'en-US'
+    utterance.rate = speechRate
     window.speechSynthesis.speak(utterance)
   }
 
@@ -406,12 +408,39 @@ function ReviewPage() {
               </div>
 
               <div className="d-flex align-items-center gap-2">
+                <div className="btn-group btn-group-sm" role="group" title="Tốc độ đọc tiếng Anh">
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${speechRate === 0.8 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    style={{ fontSize: '0.72rem', padding: '1px 6px' }}
+                    onClick={() => setSpeechRate(0.8)}
+                  >
+                    0.8x
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${speechRate === 1.0 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    style={{ fontSize: '0.72rem', padding: '1px 6px' }}
+                    onClick={() => setSpeechRate(1.0)}
+                  >
+                    1.0x
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${speechRate === 1.2 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    style={{ fontSize: '0.72rem', padding: '1px 6px' }}
+                    onClick={() => setSpeechRate(1.2)}
+                  >
+                    1.2x
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   className="btn btn-sm btn-light border rounded-circle"
                   style={{ width: 32, height: 32 }}
                   onClick={() => handleSpeak(currentQ.question)}
-                  title="Nghe phát âm tiếng Anh"
+                  title={`Nghe phát âm tiếng Anh (${speechRate}x)`}
                 >
                   <FaVolumeUp className="text-secondary" />
                 </button>
@@ -493,6 +522,17 @@ function ReviewPage() {
                     </strong></>
                   )}
                 </div>
+
+                {currentQ.explanation && (
+                  <div className="mt-2 pt-2 border-top border-secondary border-opacity-25">
+                    <strong className="d-flex align-items-center gap-1 text-primary small mb-1">
+                      <FaLightbulb /> Giải thích & Mẹo ngữ pháp:
+                    </strong>
+                    <p className="mb-0 text-dark small" style={{ whiteSpace: 'pre-line' }}>
+                      {currentQ.explanation}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

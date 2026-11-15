@@ -127,7 +127,8 @@ router.post('/:id/submit', optionalToken, async (req, res) => {
         options: q.options,
         studentAnswer,
         correctAnswer: q.correctAnswer,
-        isCorrect
+        isCorrect,
+        explanation: q.explanation || ''
       });
     });
 

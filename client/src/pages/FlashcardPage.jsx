@@ -364,6 +364,15 @@ export default function FlashcardPage() {
                   ))}
                 </div>
 
+                {currentQ.explanation && (
+                  <div className="p-2 mb-3 rounded-2 bg-primary bg-opacity-10 border border-primary border-opacity-25 small text-dark">
+                    <strong className="text-primary d-flex align-items-center gap-1 mb-1">
+                      <FaLightbulb /> Giải thích & Mẹo ngữ pháp:
+                    </strong>
+                    <span style={{ whiteSpace: 'pre-line' }}>{currentQ.explanation}</span>
+                  </div>
+                )}
+
                 <div className="text-center text-secondary small">
                   Chạm vào thẻ để lật lại mặt câu hỏi
                 </div>

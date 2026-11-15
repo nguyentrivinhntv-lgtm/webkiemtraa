@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import {
   FaCheck, FaTimes, FaHome, FaTrophy, FaRedo, FaFilter,
-  FaCheckCircle, FaTimesCircle, FaClock, FaUser, FaMedal, FaFire
+  FaCheckCircle, FaTimesCircle, FaClock, FaUser, FaMedal, FaFire, FaLightbulb
 } from 'react-icons/fa'
 
 function ResultPage() {
@@ -252,6 +252,15 @@ function ResultPage() {
                     )
                   })}
                 </div>
+
+                {item.explanation && (
+                  <div className="mt-2 ms-md-5 p-2 rounded-2 bg-primary bg-opacity-10 border border-primary border-opacity-25 small text-dark">
+                    <strong className="text-primary d-flex align-items-center gap-1 mb-1">
+                      <FaLightbulb /> Giải thích & Mẹo ngữ pháp:
+                    </strong>
+                    <span style={{ whiteSpace: 'pre-line' }}>{item.explanation}</span>
+                  </div>
+                )}
               </div>
             ))
           )}

@@ -30,13 +30,17 @@ export const getMeApi = () => api.get('/auth/me');
 export const updateProfileApi = (data) => api.put('/auth/profile', data);
 export const changePasswordApi = (data) => api.put('/auth/change-password', data);
 
-// Upload Word
+// Upload Word or Excel
 export const uploadWordFile = (file) => {
   const formData = new FormData();
   formData.append('wordFile', file);
   return api.post('/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
+};
+
+export const downloadExcelTemplateApi = () => {
+  return api.get('/upload/template/excel', { responseType: 'blob' });
 };
 
 export const parseTextQuestions = (text, title) => {

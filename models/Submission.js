@@ -6,7 +6,8 @@ const DetailSchema = new mongoose.Schema({
   options: [{ label: String, text: String, _id: false }],
   studentAnswer: { type: Number },
   correctAnswer: { type: Number },
-  isCorrect: { type: Boolean }
+  isCorrect: { type: Boolean },
+  explanation: { type: String, default: '' }
 }, { _id: false });
 
 const SubmissionSchema = new mongoose.Schema({

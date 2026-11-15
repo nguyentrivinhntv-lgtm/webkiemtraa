@@ -5,9 +5,10 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { parseWordFile, parseText } = require('../utils/wordParser');
+const { parseExcelFile, generateExcelTemplate } = require('../utils/excelParser');
 const quizService = require('../services/quizService');
 
-// Configure multer for file uploads
+// Configure multer for file uploads (.docx, .xlsx, .xls)
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = path.join(__dirname, '..', 'uploads');
@@ -24,28 +25,48 @@ const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (ext !== '.docx') {
-      return cb(new Error('Chỉ chấp nhận file .docx'));
+    if (!['.docx', '.xlsx', '.xls'].includes(ext)) {
+      return cb(new Error('Chỉ chấp nhận file Word (.docx) hoặc file Excel (.xlsx, .xls)'));
     }
     cb(null, true);
   },
-  limits: { fileSize: 15 * 1024 * 1024 } // 15MB
+  limits: { fileSize: 25 * 1024 * 1024 } // 25MB
 });
 
-// POST /api/upload - Upload and parse Word file (.docx)
+// GET /api/upload/template/excel - Download sample Excel template
+router.get('/template/excel', (req, res) => {
+  try {
+    const buffer = generateExcelTemplate();
+    res.setHeader('Content-Disposition', 'attachment; filename="Mau_De_Thi_Trac_Nghiem.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi tải file mẫu: ' + err.message });
+  }
+});
+
+// POST /api/upload - Upload and parse Word (.docx) or Excel (.xlsx/.xls)
 router.post('/', upload.single('wordFile'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'Vui lòng chọn file .docx' });
+      return res.status(400).json({ error: 'Vui lòng chọn file Word (.docx) hoặc Excel (.xlsx, .xls)' });
     }
 
     const filePath = req.file.path;
-    const parsed = await parseWordFile(filePath);
+    const ext = path.extname(req.file.originalname).toLowerCase();
+
+    let parsed = null;
+    if (ext === '.xlsx' || ext === '.xls') {
+      parsed = parseExcelFile(filePath);
+    } else {
+      parsed = await parseWordFile(filePath);
+    }
 
     // Return parsed data for preview (don't save yet)
     res.json({
       success: true,
       preview: parsed,
+      fileType: ext === '.docx' ? 'word' : 'excel',
       tempFile: req.file.filename
     });
   } catch (err) {

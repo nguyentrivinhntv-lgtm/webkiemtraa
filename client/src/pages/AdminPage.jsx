@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  FaUpload, FaTrash, FaCheck, FaTimes, FaFileWord, FaSpinner,
-  FaPaste, FaBookOpen, FaPlay, FaEye, FaPlus
+  FaUpload, FaTrash, FaCheck, FaTimes, FaFileWord, FaFileExcel, FaDownload,
+  FaSpinner, FaPaste, FaBookOpen, FaPlay, FaEye, FaPlus, FaLightbulb
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
-import { uploadWordFile, parseTextQuestions, confirmQuiz, getQuizList, deleteQuiz } from '../services/api'
+import {
+  uploadWordFile, parseTextQuestions, confirmQuiz,
+  getQuizList, deleteQuiz, downloadExcelTemplateApi
+} from '../services/api'
 
 function AdminPage() {
   const [quizzes, setQuizzes] = useState([])
@@ -39,14 +42,17 @@ function AdminPage() {
     }
   }
 
-  // Handle File Upload
+  // Handle File Upload (.docx, .xlsx, .xls)
   const handleFileUpload = async (file) => {
     if (!file) return
     setSelectedFileName(file.name)
 
-    const isDocx = file.name.toLowerCase().endsWith('.docx')
-    if (!isDocx) {
-      toast.error('Vui lòng chọn file định dạng .docx')
+    const lower = file.name.toLowerCase()
+    const isDocx = lower.endsWith('.docx')
+    const isExcel = lower.endsWith('.xlsx') || lower.endsWith('.xls')
+
+    if (!isDocx && !isExcel) {
+      toast.error('Vui lòng chọn file định dạng Word (.docx) hoặc Excel (.xlsx, .xls)')
       return
     }
 
@@ -60,11 +66,33 @@ function AdminPage() {
         ...prev,
         title: res.data.preview.title || file.name.replace(/\.[^/.]+$/, '')
       }))
-      toast.success(`🎉 Phân tích thành công ${res.data.preview.totalQuestions} câu hỏi!`)
+      const fileTypeLabel = isExcel ? 'Excel' : 'Word'
+      toast.success(`🎉 Phân tích file ${fileTypeLabel} thành công: ${res.data.preview.totalQuestions} câu hỏi!`)
     } catch (err) {
       toast.error('Lỗi phân tích: ' + (err.response?.data?.error || err.message))
     } finally {
       setUploading(false)
+    }
+  }
+
+  // Handle Download Excel Template
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await downloadExcelTemplateApi()
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'Mau_De_Thi_Trac_Nghiem.xlsx'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success('📥 Đã tải file mẫu Excel (.xlsx) thành công!')
+    } catch (err) {
+      toast.error('Lỗi tải file mẫu: ' + (err.response?.data?.error || err.message))
     }
   }
 
@@ -152,7 +180,7 @@ function AdminPage() {
             }`}
             onClick={() => { setActiveTab('file'); setPreview(null); }}
           >
-            <FaFileWord /> Tải file Word (.docx)
+            <FaFileWord className="text-primary-emphasis" /> <FaFileExcel className="text-success" /> Tải file Word (.docx) / Excel (.xlsx)
           </button>
           <button
             type="button"
@@ -166,7 +194,7 @@ function AdminPage() {
         </div>
 
         <div className="card-body p-3 p-md-4">
-          {/* TAB 1: File Word Upload */}
+          {/* TAB 1: File Word & Excel Upload */}
           {activeTab === 'file' && (
             <div>
               <div
@@ -184,29 +212,43 @@ function AdminPage() {
                   </div>
                 ) : (
                   <div className="py-2">
-                    <div className="mb-2">
-                      <FaFileWord size={48} className="text-primary opacity-75" />
+                    <div className="mb-2 d-flex justify-content-center gap-3">
+                      <FaFileWord size={44} className="text-primary opacity-75" />
+                      <FaFileExcel size={44} className="text-success opacity-75" />
                     </div>
                     <h6 className="fw-bold mb-1">
-                      {selectedFileName ? `📄 ${selectedFileName}` : 'Chạm vào đây để chọn file Word (.docx)'}
+                      {selectedFileName ? `📄 ${selectedFileName}` : 'Chạm vào đây để chọn file Word (.docx) hoặc Excel (.xlsx, .xls)'}
                     </h6>
                     <p className="text-secondary small mb-3">
                       Hỗ trợ chọn file từ điện thoại (Zalo, Tệp, Google Drive) hoặc máy tính
                     </p>
 
-                    <label
-                      htmlFor="mobileFileInput"
-                      className="btn btn-primary-custom px-4 py-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      📁 Chọn File Từ Thiết Bị
-                    </label>
+                    <div className="d-flex flex-wrap justify-content-center gap-2">
+                      <label
+                        htmlFor="mobileFileInput"
+                        className="btn btn-primary-custom px-4 py-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        📁 Chọn File Từ Thiết Bị
+                      </label>
+                      <button
+                        type="button"
+                        className="btn btn-outline-success px-3 py-2 d-flex align-items-center gap-2"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDownloadTemplate()
+                        }}
+                        title="Tải template mẫu Excel để nhập đề thi"
+                      >
+                        <FaDownload /> Tải Mẫu Excel (.xlsx)
+                      </button>
+                    </div>
 
                     <input
                       ref={fileInputRef}
                       type="file"
                       id="mobileFileInput"
-                      accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
+                      accept=".docx,.xlsx,.xls,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                       style={{ display: 'none' }}
                       onChange={(e) => {
                         if (e.target.files && e.target.files[0]) {
@@ -219,13 +261,30 @@ function AdminPage() {
               </div>
 
               <div className="mt-3 p-3 rounded-3 bg-light border small">
-                <strong className="text-dark">📌 Định dạng file Word được hỗ trợ:</strong>
-                <ul className="mb-0 mt-1 ps-3 text-secondary">
-                  <li>Câu hỏi: <code>1. Câu hỏi?</code> hoặc <code>Câu 1.</code></li>
-                  <li>Đáp án: <code>A. </code> <code>B. </code> <code>C. </code> <code>D. </code></li>
-                  <li>Đáp án đúng: Có bảng <code>ĐÁP ÁN: 1. A 2. B...</code> ở cuối hoặc <strong>in đậm</strong>.</li>
-                  <li>Đọc hiểu: Bắt đầu bằng <code>READING 1</code> hoặc <code>Passage 1</code>.</li>
-                </ul>
+                <div className="row g-2">
+                  <div className="col-12 col-md-6 border-end-md">
+                    <strong className="text-primary d-flex align-items-center gap-1">
+                      <FaFileWord /> Định dạng file Word (.docx):
+                    </strong>
+                    <ul className="mb-0 mt-1 ps-3 text-secondary">
+                      <li>Câu hỏi: <code>1. She goes to...</code> hoặc <code>Câu 1.</code></li>
+                      <li>Đáp án: <code>A. </code> <code>B. </code> <code>C. </code> <code>D. </code></li>
+                      <li>Đáp án đúng: Bảng <code>ĐÁP ÁN: 1. A 2. B...</code> ở cuối hoặc <strong>in đậm</strong>.</li>
+                      <li>Đọc hiểu: Bắt đầu bằng <code>READING 1</code> hoặc <code>Passage 1</code>.</li>
+                    </ul>
+                  </div>
+                  <div className="col-12 col-md-6">
+                    <strong className="text-success d-flex align-items-center gap-1">
+                      <FaFileExcel /> Định dạng file Excel (.xlsx, .xls):
+                    </strong>
+                    <ul className="mb-0 mt-1 ps-3 text-secondary">
+                      <li>Các cột: <code>Câu hỏi</code>, <code>A</code>, <code>B</code>, <code>C</code>, <code>D</code>.</li>
+                      <li>Đáp án đúng: Cột <code>Đáp án đúng</code> (A, B, C hoặc D).</li>
+                      <li>Giải thích & Mẹo: Cột <code>Giải thích</code> hoặc <code>Explanation</code>.</li>
+                      <li>Phân nhóm: Cột <code>Phần / Unit</code> (tùy chọn).</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -337,12 +396,21 @@ D. gone
             <div className="preview-section mb-4" style={{ maxHeight: '300px', overflowY: 'auto' }}>
               {preview.type === 'multiple-choice' && preview.questions?.slice(0, 5).map((q, i) => (
                 <div key={i} className="p-3 mb-2 bg-light rounded-3 border">
-                  <strong className="text-dark d-block mb-1">Câu {q.id || i + 1}: {q.question}</strong>
+                  <div className="d-flex justify-content-between align-items-center mb-1">
+                    <strong className="text-dark">Câu {q.id || i + 1}: {q.question}</strong>
+                    {q.unit && <span className="badge bg-secondary small">{q.unit}</span>}
+                  </div>
                   {q.options?.map((opt, oi) => (
                     <div key={oi} className={`small ${oi === q.correctAnswer ? 'text-success fw-bold' : 'text-secondary'}`}>
                       {oi === q.correctAnswer ? '✓ ' : '• '} {opt.label}. {opt.text}
                     </div>
                   ))}
+                  {q.explanation && (
+                    <div className="mt-2 p-2 rounded-2 bg-primary bg-opacity-10 text-primary small d-flex align-items-start gap-1">
+                      <FaLightbulb className="mt-1 flex-shrink-0" />
+                      <div><strong>Giải thích:</strong> {q.explanation}</div>
+                    </div>
+                  )}
                 </div>
               ))}
 
