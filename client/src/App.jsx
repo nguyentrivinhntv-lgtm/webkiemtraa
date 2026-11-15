@@ -16,6 +16,7 @@ import LeaderboardPage from './pages/LeaderboardPage';
 import ChallengePage from './pages/ChallengePage';
 import ClassroomPage from './pages/ClassroomPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import './App.css';
@@ -26,6 +27,7 @@ function App() {
       <AuthProvider>
         <Router>
           <div className="app-wrapper">
+            <PWAInstallPrompt />
             <Navbar />
             <main className="main-content">
               <Routes>

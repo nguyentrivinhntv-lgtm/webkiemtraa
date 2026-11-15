@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   FaGraduationCap, FaHome, FaCog, FaBars, FaTimes,
   FaSun, FaMoon, FaUser, FaSignOutAlt, FaSignInAlt, FaUserCircle,
-  FaStar
+  FaStar, FaMobileAlt
 } from 'react-icons/fa';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -245,6 +245,17 @@ function Navbar() {
               >
                 <FaCog className="me-2" /> Quản lý & Thêm đề thi
               </Link>
+
+              <button
+                type="button"
+                className="mobile-nav-link border-0 bg-transparent text-start w-100 text-info fw-semibold"
+                onClick={() => {
+                  closeMenu();
+                  window.dispatchEvent(new CustomEvent('open-pwa-install'));
+                }}
+              >
+                <FaMobileAlt className="me-2" /> 📲 Cài đặt App ra màn hình
+              </button>
 
               {isLoggedIn ? (
                 <>

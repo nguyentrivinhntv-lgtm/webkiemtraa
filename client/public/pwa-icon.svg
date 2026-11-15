@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="pwaBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="50%" stop-color="#0369a1" />
+      <stop offset="100%" stop-color="#075985" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+    <linearGradient id="tealGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0ea5e9" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Background with rounded squircles -->
+  <rect width="512" height="512" rx="112" fill="url(#pwaBg)" />
+
+  <!-- Subtle glow inner circle -->
+  <circle cx="256" cy="256" r="190" fill="#ffffff" fill-opacity="0.04" />
+
+  <!-- Shield / Quiz Symbol Container -->
+  <g filter="url(#shadow)">
+    <!-- Clipboard Base -->
+    <rect x="136" y="116" width="240" height="300" rx="28" fill="#ffffff" />
+    
+    <!-- Clipboard Clip -->
+    <rect x="206" y="92" width="100" height="44" rx="14" fill="#0284c7" />
+    <circle cx="256" cy="114" r="10" fill="#ffffff" />
+
+    <!-- Quiz Lines -->
+    <rect x="176" y="180" width="160" height="14" rx="7" fill="#e2e8f0" />
+    <rect x="176" y="216" width="110" height="14" rx="7" fill="#e2e8f0" />
+
+    <!-- Big Checkmark Circle -->
+    <circle cx="256" cy="300" r="64" fill="url(#goldGrad)" />
+    
+    <!-- White Checkmark -->
+    <path d="M232 300 L248 316 L284 276" stroke="#ffffff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" />
+
+    <!-- Star Accent -->
+    <path d="M366 124 L378 148 L404 152 L385 170 L390 196 L366 183 L342 196 L347 170 L328 152 L354 148 Z" fill="url(#goldGrad)" />
+  </g>
+</svg>
