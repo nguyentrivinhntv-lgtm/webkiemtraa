@@ -71,6 +71,15 @@ function Navbar() {
               </Link>
             )}
 
+            {isLoggedIn && (
+              <Link
+                className={`nav-link-custom ${location.pathname === '/classroom' ? 'active' : ''}`}
+                to="/classroom"
+              >
+                🏫 Lớp học
+              </Link>
+            )}
+
             {isTeacherOrAdmin && (
               <Link
                 className={`nav-link-custom ${location.pathname === '/teacher' ? 'active' : ''}`}
@@ -206,6 +215,16 @@ function Navbar() {
                   onClick={closeMenu}
                 >
                   📊 Tiến độ học tập cá nhân
+                </Link>
+              )}
+
+              {isLoggedIn && (
+                <Link
+                  className={`mobile-nav-link ${location.pathname === '/classroom' ? 'active' : ''}`}
+                  to="/classroom"
+                  onClick={closeMenu}
+                >
+                  🏫 Lớp học & Nhiệm vụ
                 </Link>
               )}
 

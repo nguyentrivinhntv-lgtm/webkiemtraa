@@ -75,4 +75,14 @@ export const getUserBadgesApi = () => api.get('/gamification/badges');
 export const getChallengeApi = (quizId, mode = 'speed') => api.get(`/gamification/challenge/${quizId}`, { params: { mode } });
 export const getSpeedChallengeApi = (quizId) => getChallengeApi(quizId, 'speed');
 
+// Classroom APIs
+export const createClassroomApi = (data) => api.post('/classroom', data);
+export const getTeacherClassroomsApi = () => api.get('/classroom/teacher');
+export const getStudentClassroomsApi = () => api.get('/classroom/student');
+export const joinClassroomApi = (code) => api.post('/classroom/join', { code });
+export const getClassroomDetailApi = (id) => api.get(`/classroom/${id}`);
+export const assignQuizToClassApi = (classId, data) => api.post(`/classroom/${classId}/assign`, data);
+export const getClassroomProgressApi = (classId) => api.get(`/classroom/${classId}/progress`);
+export const deleteClassroomApi = (classId) => api.delete(`/classroom/${classId}`);
+
 export default api;

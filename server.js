@@ -23,6 +23,7 @@ const authRoutes = require('./routes/auth');
 const studyRoutes = require('./routes/study');
 const teacherRoutes = require('./routes/teacher');
 const gamificationRoutes = require('./routes/gamification');
+const classroomRoutes = require('./routes/classroom');
 
 app.use('/api/upload', uploadRoutes);
 app.use('/api/quiz', quizRoutes);
@@ -30,6 +31,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/study', studyRoutes);
 app.use('/api/teacher', teacherRoutes);
 app.use('/api/gamification', gamificationRoutes);
+app.use('/api/classroom', classroomRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
