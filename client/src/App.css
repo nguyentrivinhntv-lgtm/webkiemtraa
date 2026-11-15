@@ -940,3 +940,9 @@ body {
     padding: 0.5rem !important;
   }
 }
+
+/* Grayscale for locked items */
+.filter-grayscale {
+  filter: grayscale(100%);
+  opacity: 0.45;
+}

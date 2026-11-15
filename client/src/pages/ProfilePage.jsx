@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { updateProfileApi, changePasswordApi, getUserSubmissions } from '../services/api';
+import { updateProfileApi, changePasswordApi, getUserSubmissions, getUserBadgesApi } from '../services/api';
 import { toast } from 'react-toastify';
 import { Link } from 'react-router-dom';
 import {
   FaUser, FaEnvelope, FaLock, FaIdCard, FaChalkboardTeacher,
-  FaUserGraduate, FaCalendarAlt, FaCheckCircle, FaClock, FaHistory
+  FaUserGraduate, FaCalendarAlt, FaCheckCircle, FaClock, FaHistory,
+  FaTrophy, FaMedal, FaStar, FaFire, FaBolt, FaCrown, FaShieldAlt
 } from 'react-icons/fa';
 
 export default function ProfilePage() {
@@ -25,6 +26,8 @@ export default function ProfilePage() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [submissions, setSubmissions] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [gamification, setGamification] = useState(null);
+  const [loadingGamification, setLoadingGamification] = useState(true);
 
   useEffect(() => {
     if (user) {
@@ -34,6 +37,7 @@ export default function ProfilePage() {
         classRoom: user.classRoom || ''
       });
       loadHistory();
+      loadGamification();
     }
   }, [user]);
 
@@ -45,6 +49,17 @@ export default function ProfilePage() {
       console.warn('Error loading history:', err);
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  const loadGamification = async () => {
+    try {
+      const res = await getUserBadgesApi();
+      setGamification(res.data);
+    } catch (err) {
+      console.warn('Error loading gamification:', err);
+    } finally {
+      setLoadingGamification(false);
     }
   };
 
@@ -95,6 +110,10 @@ export default function ProfilePage() {
     return `${mins}p ${secs}s`;
   };
 
+  const xpPercent = gamification
+    ? Math.min(100, Math.round(((gamification.currentLevelXP || 0) / (gamification.nextLevelXP || 150)) * 100))
+    : 0;
+
   return (
     <div className="container py-4 pb-5">
       {/* Header Banner */}
@@ -118,6 +137,102 @@ export default function ProfilePage() {
               {user?.classRoom && <span className="badge bg-light text-dark border">Lớp: {user.classRoom}</span>}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Gamification Level & XP Progress Banner */}
+      <div className="card-custom p-4 mb-4 border shadow-sm" style={{ background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.05) 0%, rgba(13, 148, 136, 0.08) 100%)' }}>
+        <div className="row align-items-center g-3">
+          <div className="col-12 col-md-7">
+            <div className="d-flex align-items-center gap-2 mb-2">
+              <span className="badge bg-primary text-white fs-6 px-3 py-1">
+                ⭐ Cấp độ {gamification?.level || 1}
+              </span>
+              <h5 className="fw-bold mb-0 text-dark">
+                {gamification?.levelTitle || 'Tập Sự Tri Thức'}
+              </h5>
+            </div>
+            <p className="text-secondary small mb-3">
+              Tích lũy XP qua các bài kiểm tra, ôn tập câu khó và hoàn thành thử thách để nâng cấp bậc học giả.
+            </p>
+
+            {/* Progress to next level */}
+            <div className="d-flex justify-content-between small fw-bold mb-1">
+              <span className="text-secondary">Tiến độ lên cấp:</span>
+              <span className="text-primary">{gamification?.currentLevelXP || 0} / {gamification?.nextLevelXP || 150} XP ({xpPercent}%)</span>
+            </div>
+            <div className="progress" style={{ height: '8px' }}>
+              <div
+                className="progress-bar bg-primary"
+                style={{ width: `${xpPercent}%` }}
+              ></div>
+            </div>
+          </div>
+
+          <div className="col-12 col-md-5 d-flex flex-wrap justify-content-md-end gap-2">
+            <div className="p-3 rounded-3 bg-white border text-center shadow-sm flex-1" style={{ minWidth: 120 }}>
+              <span className="small text-secondary d-block fw-semibold" style={{ fontSize: '0.72rem' }}>TỔNG ĐIỂM XP</span>
+              <strong className="fs-4 text-warning">🔥 {gamification?.totalXP || 0}</strong>
+            </div>
+            <div className="p-3 rounded-3 bg-white border text-center shadow-sm flex-1" style={{ minWidth: 120 }}>
+              <span className="small text-secondary d-block fw-semibold" style={{ fontSize: '0.72rem' }}>HUY HIỆU</span>
+              <strong className="fs-4 text-primary">🏅 {gamification?.totalBadgesUnlocked || 0}/{gamification?.totalBadgesCount || 8}</strong>
+            </div>
+            <Link to="/leaderboard" className="btn btn-outline-primary btn-sm w-100 d-flex align-items-center justify-content-center gap-1 mt-1 fw-bold">
+              <FaTrophy /> Bảng Vinh Danh Toàn Trường
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Badges Showcase Section */}
+      <div className="card-custom p-4 mb-4 border shadow-sm">
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <h5 className="fw-bold mb-0 fs-6 d-flex align-items-center gap-2">
+              <FaMedal className="text-warning" /> Bộ Sưu Tập Huy Hiệu ({gamification?.totalBadgesUnlocked || 0}/{gamification?.totalBadgesCount || 8})
+            </h5>
+            <span className="small text-secondary">
+              Mở khóa các mốc thành tích và danh hiệu trong quá trình học tập
+            </span>
+          </div>
+        </div>
+
+        <div className="row g-3">
+          {gamification?.badges?.map((badge) => (
+            <div key={badge.id} className="col-6 col-sm-4 col-md-3">
+              <div
+                className={`p-3 rounded-3 border text-center h-100 d-flex flex-column justify-content-between transition-all ${
+                  badge.unlocked
+                    ? 'bg-white border-primary shadow-sm'
+                    : 'bg-light bg-opacity-75 border-secondary border-opacity-25'
+                }`}
+                style={{ opacity: badge.unlocked ? 1 : 0.65 }}
+              >
+                <div>
+                  <div className={`fs-1 mb-2 ${badge.unlocked ? '' : 'filter-grayscale'}`}>
+                    {badge.icon}
+                  </div>
+                  <h6 className="fw-bold mb-1 small text-dark">{badge.name}</h6>
+                  <p className="small text-secondary mb-2" style={{ fontSize: '0.75rem', lineHeight: '1.4' }}>
+                    {badge.description}
+                  </p>
+                </div>
+
+                <div>
+                  {badge.unlocked ? (
+                    <span className="badge bg-success bg-opacity-10 text-success border border-success w-100 py-1" style={{ fontSize: '0.72rem' }}>
+                      ✓ Đã đạt (+{badge.xpReward} XP)
+                    </span>
+                  ) : (
+                    <span className="badge bg-secondary bg-opacity-10 text-secondary border w-100 py-1" style={{ fontSize: '0.72rem' }}>
+                      🔒 Chưa đạt (+{badge.xpReward} XP)
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -167,7 +282,7 @@ export default function ProfilePage() {
 
               <button
                 type="submit"
-                className="btn btn-primary-custom w-100 py-2 small"
+                className="btn btn-primary-custom w-100 py-2 small fw-bold"
                 disabled={savingProfile}
               >
                 {savingProfile ? 'Đang lưu...' : 'Lưu Thay Đổi'}
@@ -217,7 +332,7 @@ export default function ProfilePage() {
 
               <button
                 type="submit"
-                className="btn btn-outline-secondary w-100 py-2 small"
+                className="btn btn-outline-secondary w-100 py-2 small fw-semibold"
                 disabled={savingPassword}
               >
                 {savingPassword ? 'Đang xử lý...' : 'Cập Nhật Mật Khẩu'}
@@ -288,4 +403,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-

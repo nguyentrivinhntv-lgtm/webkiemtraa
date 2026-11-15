@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import {
   FaCheck, FaTimes, FaHome, FaTrophy, FaRedo, FaFilter,
-  FaCheckCircle, FaTimesCircle, FaClock, FaUser
+  FaCheckCircle, FaTimesCircle, FaClock, FaUser, FaMedal, FaFire
 } from 'react-icons/fa'
 
 function ResultPage() {
@@ -130,9 +130,33 @@ function ResultPage() {
           </div>
         </div>
 
-        <div className="d-flex justify-content-center gap-3">
-          <Link to="/" className="btn btn-primary-custom d-flex align-items-center gap-2 px-4 py-2">
+        {/* XP Reward Gamification Banner */}
+        <div className="p-3 rounded-3 bg-warning bg-opacity-10 border border-warning border-opacity-50 mx-auto mb-4 d-inline-flex flex-column align-items-center" style={{ minWidth: 280 }}>
+          <span className="small text-dark fw-semibold mb-1">
+            🌟 Điểm Kinh Nghiệm Học Tập Tích Lũy:
+          </span>
+          <div className="d-flex align-items-center gap-2">
+            <span className="fs-3 fw-bold text-warning">
+              +{(30 + (result.correctCount || 0) * 10 + (parseFloat(result.score) === 10 ? 50 : 0) + (result.tabSwitches === 0 ? 20 : 0))} XP
+            </span>
+            <span className="badge bg-warning text-dark fw-bold">Level Up!</span>
+          </div>
+          <div className="d-flex flex-wrap justify-content-center gap-2 small text-secondary mt-1" style={{ fontSize: '0.78rem' }}>
+            <span>+30 Bài thi</span> • <span>+{(result.correctCount || 0) * 10} Câu đúng</span>
+            {parseFloat(result.score) === 10 && <span> • +50 Điểm 10</span>}
+            {result.tabSwitches === 0 && <span> • +20 Trung thực</span>}
+          </div>
+        </div>
+
+        <div className="d-flex flex-wrap justify-content-center gap-3">
+          <Link to="/" className="btn btn-outline-secondary d-flex align-items-center gap-2 px-4 py-2">
             <FaHome /> Về trang chủ
+          </Link>
+          <Link to="/leaderboard" className="btn btn-outline-primary d-flex align-items-center gap-2 px-4 py-2 fw-semibold">
+            <FaTrophy /> Bảng Xếp Hạng
+          </Link>
+          <Link to="/profile" className="btn btn-primary-custom d-flex align-items-center gap-2 px-4 py-2 fw-bold">
+            <FaMedal /> Xem Huy Hiệu & Cấp Độ
           </Link>
         </div>
       </div>

@@ -70,8 +70,9 @@ export const getQuizAnalyticsApi = (quizId) => api.get(`/teacher/analytics/${qui
 export const exportQuizExcelApi = (quizId) => api.get(`/teacher/export/${quizId}`, { responseType: 'blob' });
 
 // Gamification APIs
-export const getLeaderboardApi = (quizId) => api.get('/gamification/leaderboard', { params: { quizId } });
+export const getLeaderboardApi = (quizId, timeframe = 'all') => api.get('/gamification/leaderboard', { params: { quizId, timeframe } });
 export const getUserBadgesApi = () => api.get('/gamification/badges');
-export const getSpeedChallengeApi = (quizId) => api.get(`/gamification/challenge/${quizId}`);
+export const getChallengeApi = (quizId, mode = 'speed') => api.get(`/gamification/challenge/${quizId}`, { params: { mode } });
+export const getSpeedChallengeApi = (quizId) => getChallengeApi(quizId, 'speed');
 
 export default api;

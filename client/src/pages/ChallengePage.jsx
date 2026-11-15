@@ -2,15 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   FaBolt, FaFire, FaClock, FaTrophy, FaArrowLeft,
-  FaRedo, FaHome, FaCheck, FaTimes, FaStar
+  FaRedo, FaHome, FaCheck, FaTimes, FaStar, FaHeart
 } from 'react-icons/fa';
 import { toast } from 'react-toastify';
-import { getSpeedChallengeApi } from '../services/api';
+import { getChallengeApi } from '../services/api';
 
 export default function ChallengePage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
+  const [mode, setMode] = useState('speed'); // 'speed' | 'survival' | 'daily'
   const [challengeData, setChallengeData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -21,15 +22,16 @@ export default function ChallengePage() {
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
+  const [lives, setLives] = useState(3);
   const [gameOver, setGameOver] = useState(false);
 
   const timerRef = useRef(null);
 
   useEffect(() => {
-    loadChallenge();
-  }, [id]);
+    loadChallenge(mode);
+  }, [id, mode]);
 
-  const loadChallenge = async () => {
+  const loadChallenge = async (chosenMode = mode) => {
     setLoading(true);
     setGameOver(false);
     setCurrentIdx(0);
@@ -37,13 +39,17 @@ export default function ChallengePage() {
     setCombo(0);
     setMaxCombo(0);
     setCorrectCount(0);
+    setLives(chosenMode === 'survival' ? 3 : 1);
     setSelectedOpt(null);
     setRevealed(false);
 
     try {
-      const res = await getSpeedChallengeApi(id);
+      const res = await getChallengeApi(id, chosenMode);
       setChallengeData(res.data);
       setTimeLeft(res.data.timePerQuestion || 15);
+      if (chosenMode === 'survival') {
+        setLives(3);
+      }
     } catch (err) {
       toast.error('Lỗi tải thử thách: ' + (err.response?.data?.error || err.message));
       navigate('/');
@@ -52,7 +58,7 @@ export default function ChallengePage() {
     }
   };
 
-  // 15-second countdown timer per question
+  // Countdown timer per question
   useEffect(() => {
     if (loading || gameOver || revealed) return;
 
@@ -74,9 +80,19 @@ export default function ChallengePage() {
     setRevealed(true);
     setCombo(0); // Break combo on timeout
     toast.error('⏰ Hết thời gian cho câu hỏi này!');
+
+    if (mode === 'survival') {
+      const remainingLives = lives - 1;
+      setLives(remainingLives);
+      if (remainingLives <= 0) {
+        setTimeout(() => setGameOver(true), 1200);
+        return;
+      }
+    }
+
     setTimeout(() => {
       nextQuestion();
-    }, 1500);
+    }, 1400);
   };
 
   const handleSelect = (optIndex) => {
@@ -94,17 +110,26 @@ export default function ChallengePage() {
       setMaxCombo(prev => Math.max(prev, newCombo));
       setCorrectCount(prev => prev + 1);
 
-      // Points: 100 base * combo multiplier (1.0 to 2.5) + remaining seconds bonus
+      // Points calculation
       const multiplier = Math.min(2.5, 1 + (newCombo - 1) * 0.3);
-      const points = Math.round(100 * multiplier) + (timeLeft * 10);
+      const modeMultiplier = mode === 'daily' ? 2 : 1;
+      const points = Math.round((100 * multiplier + timeLeft * 10) * modeMultiplier);
       setScore(prev => prev + points);
     } else {
       setCombo(0); // Reset combo
+      if (mode === 'survival') {
+        const remainingLives = lives - 1;
+        setLives(remainingLives);
+        if (remainingLives <= 0) {
+          setTimeout(() => setGameOver(true), 1200);
+          return;
+        }
+      }
     }
 
     setTimeout(() => {
       nextQuestion();
-    }, 1500);
+    }, 1400);
   };
 
   const nextQuestion = () => {
@@ -132,28 +157,46 @@ export default function ChallengePage() {
   return (
     <div className="container py-4 pb-5">
       {/* Header */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
+      <div className="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
         <div>
           <Link to="/" className="text-secondary text-decoration-none small d-flex align-items-center gap-1 mb-1">
             <FaArrowLeft /> Về trang chủ
           </Link>
           <h3 className="fw-bold mb-0 d-flex align-items-center gap-2">
-            ⚡ Thử Thách Tốc Độ (Speed Quiz)
+            {mode === 'survival' ? '❤️ Thử Thách Sinh Tồn' : mode === 'daily' ? '🌟 Thử Thách Mỗi Ngày' : '⚡ Thử Thách Tốc Độ'}
           </h3>
           <p className="text-secondary small mb-0">{challengeData?.quizTitle}</p>
         </div>
 
-        <div className="d-flex align-items-center gap-3">
-          {/* Combo badge */}
-          {combo >= 2 && (
-            <div className="badge bg-warning text-dark px-3 py-2 fs-6 fw-bold shadow-sm fa-bounce">
-              <FaFire className="text-danger me-1" /> COMBO x{combo}!
-            </div>
-          )}
+        {/* Mode Selector Tabs */}
+        <div className="d-flex flex-wrap align-items-center gap-2">
+          <div className="btn-group btn-group-sm" role="group">
+            <button
+              type="button"
+              className={`btn ${mode === 'speed' ? 'btn-primary' : 'btn-outline-secondary'} fw-semibold`}
+              onClick={() => setMode('speed')}
+            >
+              ⚡ Tốc Độ
+            </button>
+            <button
+              type="button"
+              className={`btn ${mode === 'survival' ? 'btn-danger' : 'btn-outline-secondary'} fw-semibold`}
+              onClick={() => setMode('survival')}
+            >
+              ❤️ Sinh Tồn
+            </button>
+            <button
+              type="button"
+              className={`btn ${mode === 'daily' ? 'btn-warning text-dark' : 'btn-outline-secondary'} fw-semibold`}
+              onClick={() => setMode('daily')}
+            >
+              🌟 Hàng Ngày (2x)
+            </button>
+          </div>
 
-          {/* Current score ticker */}
+          {/* Current Score Ticker */}
           <div className="card-custom py-1 px-3 border border-primary text-center">
-            <span className="small text-secondary d-block" style={{ fontSize: '0.7rem' }}>ĐIỂM SỐ</span>
+            <span className="small text-secondary d-block" style={{ fontSize: '0.68rem' }}>ĐIỂM SỐ</span>
             <strong className="fs-5 text-primary fw-bold">{score}</strong>
           </div>
         </div>
@@ -162,17 +205,37 @@ export default function ChallengePage() {
       {!gameOver && currentQ ? (
         <div className="row justify-content-center">
           <div className="col-12 col-md-10 col-lg-8">
-            {/* Timer Countdown Bar */}
+            {/* Status Bar */}
             <div className="card-custom p-3 mb-3 border shadow-sm">
-              <div className="d-flex justify-content-between align-items-center mb-1 small fw-bold">
-                <span className="text-secondary">
-                  Câu {currentIdx + 1} / {challengeData.questions.length}
-                </span>
+              <div className="d-flex justify-content-between align-items-center mb-2 small fw-bold">
+                <div className="d-flex align-items-center gap-2">
+                  <span className="text-secondary">
+                    Câu {currentIdx + 1} / {challengeData.questions.length}
+                  </span>
+                  {mode === 'survival' && (
+                    <div className="d-flex align-items-center gap-1 ms-2">
+                      <span className="small text-secondary me-1">Mạng:</span>
+                      {[...Array(3)].map((_, i) => (
+                        <span key={i} className="fs-6">
+                          {i < lives ? '❤️' : '🖤'}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {combo >= 2 && (
+                    <span className="badge bg-warning text-dark fa-bounce">
+                      <FaFire className="text-danger me-1" /> x{combo}
+                    </span>
+                  )}
+                </div>
+
                 <span className={`d-flex align-items-center gap-1 ${timeLeft <= 5 ? 'text-danger fw-bold fa-beat' : 'text-primary'}`}>
                   <FaClock /> {timeLeft}s
                 </span>
               </div>
-              <div className="progress" style={{ height: '8px' }}>
+
+              {/* Progress Line */}
+              <div className="progress" style={{ height: '7px' }}>
                 <div
                   className={`progress-bar ${timeLeft <= 5 ? 'bg-danger' : timeLeft <= 8 ? 'bg-warning' : 'bg-primary'}`}
                   style={{ width: `${timePercent}%`, transition: 'width 1s linear' }}
@@ -187,7 +250,7 @@ export default function ChallengePage() {
                   {currentQ.unit || `Câu ${currentIdx + 1}`}
                 </span>
                 <span className="small text-secondary">
-                  ⚡ 15 giây mỗi câu
+                  {mode === 'survival' ? '❤️ 3 mạng, sai 3 lần là kết thúc' : mode === 'daily' ? '🌟 Nhân đôi điểm thưởng XP' : '⚡ 15 giây mỗi câu'}
                 </span>
               </div>
 
@@ -241,54 +304,58 @@ export default function ChallengePage() {
         /* Game Over High Score Screen */
         <div className="row justify-content-center">
           <div className="col-12 col-md-8 col-lg-6">
-            <div className="card-custom p-5 text-center border shadow-lg">
+            <div className="card-custom p-4 p-md-5 text-center border shadow-lg">
               <div className="mb-3">
                 <div className="d-inline-flex p-3 rounded-circle bg-warning bg-opacity-10 text-warning">
-                  <FaTrophy size={56} className="fa-bounce" />
+                  <FaTrophy size={52} className="fa-bounce" />
                 </div>
               </div>
 
-              <h3 className="fw-bold mb-1">Hoàn Thành Thử Thách Tốc Độ!</h3>
+              <h3 className="fw-bold mb-1">
+                {mode === 'survival' ? 'Kết Thúc Thử Thách Sinh Tồn!' : mode === 'daily' ? 'Hoàn Thành Thử Thách Mỗi Ngày!' : 'Hoàn Thành Thử Thách Tốc Độ!'}
+              </h3>
               <p className="text-secondary small mb-4">{challengeData?.quizTitle}</p>
 
               {/* Final Score Ring */}
-              <div className="result-circle mb-3" style={{ width: 150, height: 150 }}>
-                <div className="result-score" style={{ fontSize: '2.8rem' }}>{score}</div>
+              <div className="result-circle mb-3 mx-auto" style={{ width: 140, height: 140 }}>
+                <div className="result-score" style={{ fontSize: '2.5rem' }}>{score}</div>
                 <span className="text-secondary small fw-semibold">Điểm Thưởng</span>
               </div>
 
               {/* Summary Stats */}
-              <div className="row g-2 mb-4">
+              <div className="row g-2 mb-4 text-center">
                 <div className="col-4">
                   <div className="p-2 rounded-3 bg-light border">
-                    <span className="small text-secondary d-block">Đúng</span>
-                    <strong className="text-success fs-5">{correctCount} / 10</strong>
+                    <span className="small text-secondary d-block" style={{ fontSize: '0.75rem' }}>Đúng</span>
+                    <strong className="text-success fs-5">{correctCount}</strong>
                   </div>
                 </div>
                 <div className="col-4">
                   <div className="p-2 rounded-3 bg-light border">
-                    <span className="small text-secondary d-block">Chuỗi Combo</span>
+                    <span className="small text-secondary d-block" style={{ fontSize: '0.75rem' }}>Combo Cao Nhất</span>
                     <strong className="text-warning fs-5">x{maxCombo}</strong>
                   </div>
                 </div>
                 <div className="col-4">
                   <div className="p-2 rounded-3 bg-light border">
-                    <span className="small text-secondary d-block">Độ chính xác</span>
-                    <strong className="text-primary fs-5">{correctCount * 10}%</strong>
+                    <span className="small text-secondary d-block" style={{ fontSize: '0.75rem' }}>Độ Chính Xác</span>
+                    <strong className="text-primary fs-5">
+                      {challengeData?.questions?.length ? Math.round((correctCount / challengeData.questions.length) * 100) : 0}%
+                    </strong>
                   </div>
                 </div>
               </div>
 
-              <div className="d-flex gap-2 justify-content-center">
+              <div className="d-flex flex-wrap gap-2 justify-content-center">
                 <button
                   type="button"
-                  className="btn btn-outline-primary px-4 py-2"
-                  onClick={loadChallenge}
+                  className="btn btn-outline-primary px-3 py-2 fw-semibold"
+                  onClick={() => loadChallenge(mode)}
                 >
-                  <FaRedo className="me-2" /> Thử Thách Lại
+                  <FaRedo className="me-2" /> Chơi Lại
                 </button>
-                <Link to="/leaderboard" className="btn btn-primary-custom px-4 py-2">
-                  <FaTrophy className="me-2" /> Xem Bảng Xếp Hạng
+                <Link to="/leaderboard" className="btn btn-primary-custom px-4 py-2 fw-bold">
+                  <FaTrophy className="me-2" /> Bảng Vinh Danh
                 </Link>
               </div>
             </div>
@@ -298,4 +365,3 @@ export default function ChallengePage() {
     </div>
   );
 }
-

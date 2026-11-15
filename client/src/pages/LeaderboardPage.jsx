@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FaTrophy, FaMedal, FaCrown, FaClock, FaCheckCircle,
-  FaArrowLeft, FaFilter, FaUser, FaPlay, FaFire
+  FaArrowLeft, FaFilter, FaUser, FaPlay, FaFire, FaCalendarAlt
 } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { getLeaderboardApi, getQuizList } from '../services/api';
@@ -12,6 +12,7 @@ export default function LeaderboardPage() {
   const { user } = useAuth();
   const [quizzes, setQuizzes] = useState([]);
   const [selectedQuizId, setSelectedQuizId] = useState('all');
+  const [timeframe, setTimeframe] = useState('all'); // 'all', 'week', 'today'
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,7 +22,7 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     loadLeaderboard();
-  }, [selectedQuizId]);
+  }, [selectedQuizId, timeframe]);
 
   const loadQuizzes = async () => {
     try {
@@ -35,7 +36,7 @@ export default function LeaderboardPage() {
   const loadLeaderboard = async () => {
     setLoading(true);
     try {
-      const res = await getLeaderboardApi(selectedQuizId === 'all' ? null : selectedQuizId);
+      const res = await getLeaderboardApi(selectedQuizId === 'all' ? null : selectedQuizId, timeframe);
       setLeaderboard(res.data || []);
     } catch (err) {
       toast.error('Lỗi tải bảng xếp hạng: ' + (err.response?.data?.error || err.message));
@@ -47,7 +48,6 @@ export default function LeaderboardPage() {
   const top1 = leaderboard[0];
   const top2 = leaderboard[1];
   const top3 = leaderboard[2];
-  const remaining = leaderboard.slice(3);
 
   const formatTime = (seconds) => {
     if (!seconds) return '0s';
@@ -72,20 +72,47 @@ export default function LeaderboardPage() {
           </p>
         </div>
 
-        {/* Filter by quiz */}
-        <div className="d-flex align-items-center gap-2">
-          <FaFilter className="text-secondary" />
-          <select
-            className="form-select form-select-sm"
-            value={selectedQuizId}
-            onChange={e => setSelectedQuizId(e.target.value)}
-            style={{ minWidth: 200 }}
-          >
-            <option value="all">🏆 Toàn hệ thống</option>
-            {quizzes.map(q => (
-              <option key={q.id} value={q.id}>{q.title}</option>
-            ))}
-          </select>
+        {/* Filter controls */}
+        <div className="d-flex flex-wrap align-items-center gap-2">
+          {/* Timeframe tabs */}
+          <div className="btn-group btn-group-sm" role="group">
+            <button
+              type="button"
+              className={`btn ${timeframe === 'all' ? 'btn-primary' : 'btn-outline-secondary'} fw-semibold`}
+              onClick={() => setTimeframe('all')}
+            >
+              🏆 Mọi lúc
+            </button>
+            <button
+              type="button"
+              className={`btn ${timeframe === 'week' ? 'btn-primary' : 'btn-outline-secondary'} fw-semibold`}
+              onClick={() => setTimeframe('week')}
+            >
+              📅 Tuần này
+            </button>
+            <button
+              type="button"
+              className={`btn ${timeframe === 'today' ? 'btn-primary' : 'btn-outline-secondary'} fw-semibold`}
+              onClick={() => setTimeframe('today')}
+            >
+              ⚡ Hôm nay
+            </button>
+          </div>
+
+          {/* Filter by quiz */}
+          <div className="d-flex align-items-center gap-1">
+            <select
+              className="form-select form-select-sm"
+              value={selectedQuizId}
+              onChange={e => setSelectedQuizId(e.target.value)}
+              style={{ minWidth: 180 }}
+            >
+              <option value="all">Toàn bộ đề thi</option>
+              {quizzes.map(q => (
+                <option key={q.id} value={q.id}>{q.title}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -98,7 +125,9 @@ export default function LeaderboardPage() {
           <div className="empty-icon">🏆</div>
           <h5 className="fw-bold mb-2">Chưa có ai ghi danh vào bảng xếp hạng!</h5>
           <p className="text-secondary mb-4">
-            Hãy là người đầu tiên hoàn thành bài thi với điểm số cao nhất để ghi tên lên bảng vàng!
+            {timeframe !== 'all'
+              ? `Chưa có lượt nộp bài nào trong khoảng thời gian này (${timeframe === 'today' ? 'hôm nay' : 'tuần này'}).`
+              : 'Hãy là người đầu tiên hoàn thành bài thi với điểm số cao nhất để ghi tên lên bảng vàng!'}
           </p>
           <Link to="/" className="btn btn-primary-custom">
             Vào thi ngay
@@ -122,7 +151,7 @@ export default function LeaderboardPage() {
                   <div className="small text-secondary">
                     <FaClock className="me-1" />{formatTime(top2.timeSpent)}
                   </div>
-                  <div className="small text-secondary mt-1">Hạng 2</div>
+                  <div className="small text-secondary mt-1 fw-bold">Hạng 2</div>
                 </div>
               </div>
             )}
@@ -169,7 +198,7 @@ export default function LeaderboardPage() {
                   <div className="small text-secondary">
                     <FaClock className="me-1" />{formatTime(top3.timeSpent)}
                   </div>
-                  <div className="small text-secondary mt-1">Hạng 3</div>
+                  <div className="small text-secondary mt-1 fw-bold">Hạng 3</div>
                 </div>
               </div>
             )}
@@ -178,7 +207,7 @@ export default function LeaderboardPage() {
           {/* Full Leaderboard Table */}
           <div className="card-custom p-4 border shadow-sm">
             <h5 className="fw-bold mb-3 fs-6 d-flex align-items-center gap-2">
-              <FaMedal className="text-warning" /> Danh Sách Xếp Hạng Chi Tiết
+              <FaMedal className="text-warning" /> Danh Sách Xếp Hạng Chi Tiết ({leaderboard.length} thí sinh)
             </h5>
 
             <div className="table-responsive">
@@ -249,4 +278,3 @@ export default function LeaderboardPage() {
     </div>
   );
 }
-
