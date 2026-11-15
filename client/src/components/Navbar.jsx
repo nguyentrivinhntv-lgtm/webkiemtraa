@@ -50,7 +50,24 @@ function Navbar() {
               <FaStar className="text-warning" /> Đã lưu
             </Link>
 
-            {/* Admin only for teacher or admin or show link */}
+            {isLoggedIn && (
+              <Link
+                className={`nav-link-custom ${location.pathname === '/dashboard' ? 'active' : ''}`}
+                to="/dashboard"
+              >
+                📊 Thống kê
+              </Link>
+            )}
+
+            {isTeacherOrAdmin && (
+              <Link
+                className={`nav-link-custom ${location.pathname === '/teacher' ? 'active' : ''}`}
+                to="/teacher"
+              >
+                👨‍🏫 Bảng điểm
+              </Link>
+            )}
+
             <Link
               className={`nav-link-custom ${location.pathname === '/admin' ? 'active' : ''}`}
               to="/admin"
@@ -163,6 +180,26 @@ function Navbar() {
               >
                 <FaStar className="me-2 text-warning" /> Câu hỏi đã đánh dấu
               </Link>
+              {isLoggedIn && (
+                <Link
+                  className={`mobile-nav-link ${location.pathname === '/dashboard' ? 'active' : ''}`}
+                  to="/dashboard"
+                  onClick={closeMenu}
+                >
+                  📊 Tiến độ học tập cá nhân
+                </Link>
+              )}
+
+              {isTeacherOrAdmin && (
+                <Link
+                  className={`mobile-nav-link ${location.pathname === '/teacher' ? 'active' : ''}`}
+                  to="/teacher"
+                  onClick={closeMenu}
+                >
+                  👨‍🏫 Bảng điểm & Thống kê lớp
+                </Link>
+              )}
+
               <Link
                 className={`mobile-nav-link ${location.pathname === '/admin' ? 'active' : ''}`}
                 to="/admin"

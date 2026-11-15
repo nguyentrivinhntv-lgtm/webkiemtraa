@@ -64,4 +64,9 @@ export const saveQuizProgressApi = (quizId, data) => api.post(`/study/progress/$
 export const getDueSpacedRepApi = (quizId) => api.get('/study/spaced-rep/due', { params: { quizId } });
 export const submitSpacedRepReviewApi = (cardData, quality) => api.post('/study/spaced-rep/review', { cardData, quality });
 
+// Teacher APIs
+export const getTeacherOverviewApi = () => api.get('/teacher/overview');
+export const getQuizAnalyticsApi = (quizId) => api.get(`/teacher/analytics/${quizId}`);
+export const exportQuizExcelApi = (quizId) => api.get(`/teacher/export/${quizId}`, { responseType: 'blob' });
+
 export default api;
