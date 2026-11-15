@@ -186,12 +186,24 @@ function QuizPage() {
       }
     }
 
+    // 6. Lock mobile / browser Back button (popstate trap)
+    window.history.pushState(null, '', window.location.href)
+    const handlePopState = (e) => {
+      e.preventDefault()
+      window.history.pushState(null, '', window.location.href)
+      if (startedRef.current && !isSubmittingRef.current) {
+        toast.error('❌ BẠN ĐÃ BẤM QUAY LẠI TRANG! Bài thi lập tức bị thu bài theo quy chế.')
+        executeSubmit(1, 'Bị thu bài ngay lập tức do bấm nút Quay lại (Back)')
+      }
+    }
+
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
     document.addEventListener('visibilitychange', handleVisibilityChange)
     document.addEventListener('contextmenu', handleContextMenu)
     document.addEventListener('copy', handleCopy)
     window.addEventListener('beforeunload', handleBeforeUnload)
+    window.addEventListener('popstate', handlePopState)
 
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
@@ -200,6 +212,7 @@ function QuizPage() {
       document.removeEventListener('contextmenu', handleContextMenu)
       document.removeEventListener('copy', handleCopy)
       window.removeEventListener('beforeunload', handleBeforeUnload)
+      window.removeEventListener('popstate', handlePopState)
     }
   }, [started])
 

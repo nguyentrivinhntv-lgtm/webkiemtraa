@@ -24,6 +24,11 @@ function Navbar() {
     navigate('/');
   };
 
+  // Completely hide Navbar and bottom navigation bar during exam!
+  if (location.pathname.startsWith('/quiz/')) {
+    return null;
+  }
+
   return (
     <>
       <nav className="navbar navbar-custom sticky-top">
