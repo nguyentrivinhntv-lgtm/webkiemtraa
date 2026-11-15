@@ -56,6 +56,13 @@ function ResultPage() {
         <h2 className="fw-bold mb-1">Kết Quả Bài Kiểm Tra</h2>
         <p className="text-secondary fs-5 mb-4">{result.quizTitle}</p>
 
+        {/* Violation Warning Banner */}
+        {location.state?.violationReason && location.state.violationReason.includes('Bị thu bài') && (
+          <div className="alert alert-danger mx-auto mb-4 py-2 px-3 fw-bold small text-start border border-danger" style={{ maxWidth: '600px' }}>
+            ⚠️ BÀI THI BỊ THU BÀI ĐỘT NGỘT: {location.state.violationReason}. Hệ thống đã tự động chấm điểm đến câu hỏi bạn đã làm trước khi vi phạm.
+          </div>
+        )}
+
         {/* Score Ring */}
         <div className="result-circle mb-4">
           <div className="result-score">{result.score}</div>

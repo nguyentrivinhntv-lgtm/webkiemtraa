@@ -27,12 +27,13 @@ function QuizPage() {
   const [currentQIndex, setCurrentQIndex] = useState(0)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
 
-  // Anti-Cheat & Proctoring States
-  const [tabSwitches, setTabSwitches] = useState(0)
-  const [showViolationModal, setShowViolationModal] = useState(false)
-  const [showFullscreenWarning, setShowFullscreenWarning] = useState(false)
-  const MAX_VIOLATIONS = 3
+  // Strict Anti-Cheat: Zero tolerance (Exit or Tab switch = IMMEDIATE auto-submit)
   const isSubmittingRef = useRef(false)
+  const startedRef = useRef(false)
+
+  useEffect(() => {
+    startedRef.current = started
+  }, [started])
 
   // Update studentInfo when user loads
   useEffect(() => {
@@ -57,7 +58,7 @@ function QuizPage() {
       setTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(timer)
-          handleAutoSubmit()
+          handleAutoSubmit('Hết thời gian làm bài')
           return 0
         }
         return prev - 1
@@ -102,7 +103,7 @@ function QuizPage() {
 
   // Keyboard navigation shortcuts
   useEffect(() => {
-    if (!started || showConfirmModal || showViolationModal || showFullscreenWarning) return
+    if (!started || showConfirmModal) return
 
     const handleKeyDown = (e) => {
       if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return
@@ -126,7 +127,7 @@ function QuizPage() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [started, showConfirmModal, showViolationModal, showFullscreenWarning, currentQIndex, allQuestions.length])
+  }, [started, showConfirmModal, currentQIndex, allQuestions.length])
 
   // Fullscreen helper
   const enterFullscreen = () => {
@@ -139,43 +140,33 @@ function QuizPage() {
       } else if (docEl.msRequestFullscreen) {
         docEl.msRequestFullscreen()
       }
-      setShowFullscreenWarning(false)
     } catch (err) {
-      console.warn('Fullscreen request failed:', err)
+      console.warn('Fullscreen request error:', err)
     }
   }
 
-  // Anti-Cheat & Proctoring Listeners
+  // Strict Anti-Cheat Listeners (IMMEDIATE submit on exit or tab switch)
   useEffect(() => {
     if (!started) return
 
-    // 1. Detect exiting fullscreen mode
+    // 1. Detect exiting fullscreen mode -> Submit immediately!
     const handleFullscreenChange = () => {
       const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement)
-      if (!isFS && !isSubmittingRef.current) {
-        setShowFullscreenWarning(true)
-      } else {
-        setShowFullscreenWarning(false)
+      if (!isFS && startedRef.current && !isSubmittingRef.current) {
+        toast.error('❌ BẠN ĐÃ THOÁT TOÀN MÀN HÌNH! Hệ thống lập tức thu bài thi theo quy chế.')
+        executeSubmit(1, 'Bị thu bài ngay lập tức do thoát chế độ toàn màn hình')
       }
     }
 
-    // 2. Detect switching tab or minimizing browser window
+    // 2. Detect switching tab, minimizing, or switching apps on mobile -> Submit immediately!
     const handleVisibilityChange = () => {
-      if (document.hidden && !isSubmittingRef.current) {
-        setTabSwitches(prev => {
-          const nextVal = prev + 1
-          if (nextVal >= MAX_VIOLATIONS) {
-            toast.error('❌ BẠN ĐÃ RỜI MÀN HÌNH QUÁ 3 LẦN! Bài thi tự động bị đình chỉ và nộp ngay.')
-            executeSubmit(nextVal)
-          }
-          return nextVal
-        })
-      } else if (!document.hidden && !isSubmittingRef.current) {
-        setShowViolationModal(true)
+      if (document.hidden && startedRef.current && !isSubmittingRef.current) {
+        toast.error('❌ BẠN ĐÃ RỜI KHỎI MÀN HÌNH BÀI THI! Hệ thống lập tức thu bài thi theo quy chế.')
+        executeSubmit(1, 'Bị thu bài ngay lập tức do chuyển tab hoặc mở ứng dụng khác')
       }
     }
 
-    // 3. Prevent right click (anti-inspect / copy)
+    // 3. Prevent right click
     const handleContextMenu = (e) => {
       e.preventDefault()
       toast.warning('⚠️ Chuột phải bị khóa trong phòng thi!')
@@ -187,7 +178,7 @@ function QuizPage() {
       toast.warning('⚠️ Tính năng sao chép bị vô hiệu hóa trong phòng thi!')
     }
 
-    // 5. Prevent reload or navigation
+    // 5. Prevent reload or leaving page
     const handleBeforeUnload = (e) => {
       if (!isSubmittingRef.current) {
         e.preventDefault()
@@ -220,15 +211,15 @@ function QuizPage() {
     }
     setStarted(true)
     enterFullscreen()
-    toast.info('🛡️ Chế độ giám sát toàn màn hình đã được kích hoạt. Không được thoát màn hình hoặc mở tab khác!')
+    toast.info('🛡️ Chế độ phòng thi nghiêm ngặt đã bật. Tuyệt đối không thoát màn hình hoặc mở ứng dụng khác!')
   }
 
-  const handleAutoSubmit = async () => {
-    toast.error('Đã hết thời gian làm bài! Hệ thống đang tự động nộp bài...')
-    await executeSubmit()
+  const handleAutoSubmit = async (reason) => {
+    toast.error('Đang tự động nộp bài: ' + reason)
+    await executeSubmit(1, reason)
   }
 
-  const executeSubmit = async (finalSwitches) => {
+  const executeSubmit = async (tabSwitchesCount = 0, violationReason = '') => {
     if (isSubmittingRef.current) return
     isSubmittingRef.current = true
 
@@ -239,14 +230,19 @@ function QuizPage() {
         studentId: studentInfo.studentId || '',
         answers,
         timeSpent,
-        tabSwitches: finalSwitches !== undefined ? finalSwitches : tabSwitches
+        tabSwitches: tabSwitchesCount
       })
 
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {})
       }
 
-      navigate('/result', { state: { result: res.data } })
+      navigate('/result', {
+        state: {
+          result: res.data,
+          violationReason
+        }
+      })
     } catch (err) {
       toast.error('Lỗi khi nộp bài: ' + (err.response?.data?.error || err.message))
       isSubmittingRef.current = false
@@ -273,21 +269,29 @@ function QuizPage() {
       <div className="entrance-overlay">
         <div className="entrance-modal" style={{ maxWidth: '480px' }}>
           <div className="text-center mb-3">
-            <div className="d-inline-flex p-3 rounded-circle bg-primary bg-opacity-10 text-primary mb-2">
-              <FaShieldAlt size={36} />
+            <div className="d-inline-flex p-3 rounded-circle bg-danger bg-opacity-10 text-danger mb-2">
+              <FaShieldAlt size={40} />
             </div>
-            <h3 className="fw-bold mb-1">Quy Chế Phòng Thi Online</h3>
+            <h3 className="fw-bold mb-1">Quy Chế Phòng Thi Nghiêm Ngặt</h3>
             <p className="text-secondary small">{quiz.title}</p>
           </div>
 
-          {/* Anti-cheat rules notice */}
+          {/* Strict Anti-cheat zero tolerance notice */}
           <div className="p-3 mb-3 rounded-3 bg-danger bg-opacity-10 border border-danger small text-start">
-            <strong className="text-danger d-block mb-1">⚠️ LƯU Ý BẮT BUỘC KHI LÀM BÀI:</strong>
-            <ul className="mb-0 ps-3 text-dark">
-              <li>Bài thi sẽ chạy ở chế độ <strong>Toàn màn hình (Fullscreen)</strong>.</li>
-              <li><strong>Nghiêm cấm</strong> chuyển tab, thu nhỏ trình duyệt, hoặc mở ứng dụng khác (Zalo, Google, AI...).</li>
-              <li>Mỗi lần rời khỏi màn hình sẽ bị ghi nhận. <strong>Vi phạm quá 3 lần</strong> sẽ bị hệ thống tự động thu bài!</li>
-              <li>Chức năng sao chép và chuột phải đã bị vô hiệu hóa.</li>
+            <strong className="text-danger d-block mb-1 fs-6">
+              ⛔ CẢNH BÁO BẮT BUỘC (KHÔNG CẢNH BÁO LẦN 2):
+            </strong>
+            <ul className="mb-0 ps-3 text-dark fw-medium">
+              <li className="mb-1 text-danger fw-bold">
+                BẤM THOÁT MÀN HÌNH HOẶC CHUYỂN TAB SẼ BỊ BẮT NỘP BÀI NGAY LẬP TỨC!
+              </li>
+              <li className="mb-1">
+                Trên điện thoại: <strong>Không vuốt về màn hình chính</strong>, không mở Zalo, Messenger, Google, ChatGPT hay từ điển.
+              </li>
+              <li className="mb-1">
+                Trên máy tính: <strong>Không bấm phím Esc</strong>, không chuyển cửa sổ, không mở tab khác.
+              </li>
+              <li>Chức năng sao chép, bôi đen và chuột phải đã bị khóa hoàn toàn.</li>
             </ul>
           </div>
 
@@ -331,8 +335,8 @@ function QuizPage() {
               <span>Thời gian: <strong className="text-primary">{quiz.timeLimit} phút</strong></span>
             </div>
 
-            <button type="submit" className="btn btn-primary-custom w-100 py-3 fs-6 d-flex align-items-center justify-content-center gap-2">
-              <FaExpand /> Bật Toàn Màn Hình & Bắt Đầu Thi
+            <button type="submit" className="btn btn-danger-custom w-100 py-3 fs-6 d-flex align-items-center justify-content-center gap-2 fw-bold">
+              <FaExpand /> Tôi Cam Kết Không Thoát Màn Hình & Vào Thi
             </button>
           </form>
         </div>
@@ -342,7 +346,6 @@ function QuizPage() {
 
   const currentQ = allQuestions[currentQIndex]
 
-  // Detect which passage this question belongs to (for reading comprehension)
   let currentPassage = null
   if (quiz.type === 'reading-comprehension') {
     let qCount = 0
@@ -356,8 +359,8 @@ function QuizPage() {
   }
 
   return (
-    <div style={{ userSelect: 'none' }}>
-      {/* Sticky Header with Timer, Progress & Proctoring Badge */}
+    <div style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>
+      {/* Sticky Header with Timer & Strict Proctoring Badge */}
       <div className="timer-bar mb-4 shadow-sm border-bottom">
         <div className="container">
           <div className="d-flex justify-content-between align-items-center py-1">
@@ -365,9 +368,8 @@ function QuizPage() {
               <FaUser className="text-primary" />
               <span className="fw-bold text-dark">{studentInfo.name}</span>
               {studentInfo.studentId && <span className="badge bg-secondary d-none d-sm-inline-block">{studentInfo.studentId}</span>}
-              {/* Proctoring live violation indicator */}
-              <span className={`badge ${tabSwitches === 0 ? 'bg-success bg-opacity-10 text-success border border-success' : 'bg-danger text-white'}`}>
-                🛡️ Rời màn hình: {tabSwitches} / {MAX_VIOLATIONS}
+              <span className="badge bg-danger text-white">
+                🛡️ Khóa màn hình: Rời tab = Thu bài ngay
               </span>
             </div>
 
@@ -525,10 +527,8 @@ function QuizPage() {
                   <span className="fw-bold text-danger">{allQuestions.length - answeredCount} câu</span>
                 </div>
                 <div className="d-flex justify-content-between small">
-                  <span className="text-secondary">Rời màn hình:</span>
-                  <strong className={tabSwitches > 0 ? 'text-danger' : 'text-success'}>
-                    {tabSwitches} / {MAX_VIOLATIONS} lần
-                  </strong>
+                  <span className="text-secondary">Quy chế:</span>
+                  <span className="text-danger fw-bold">Rời màn hình = Thu bài ngay</span>
                 </div>
               </div>
 
@@ -543,65 +543,7 @@ function QuizPage() {
         </div>
       </div>
 
-      {/* 1. Fullscreen Warning Overlay (When student presses Esc or exits fullscreen) */}
-      {showFullscreenWarning && (
-        <div className="entrance-overlay" style={{ zIndex: 99999, background: 'rgba(15, 23, 42, 0.95)' }}>
-          <div className="entrance-modal text-center p-4 border border-danger shadow-lg" style={{ maxWidth: '460px' }}>
-            <FaBan size={56} className="text-danger mb-3" />
-            <h4 className="fw-bold text-danger mb-2">BẠN ĐÃ THOÁT TOÀN MÀN HÌNH!</h4>
-            <p className="text-secondary small mb-3">
-              Theo quy chế thi, bài thi chỉ được tiếp tục ở chế độ Toàn Màn Hình. Hành động thoát màn hình đã được ghi nhận vào biên bản thi.
-            </p>
-            <button
-              type="button"
-              className="btn btn-danger-custom w-100 py-3 fs-6 d-flex align-items-center justify-content-center gap-2"
-              onClick={enterFullscreen}
-            >
-              <FaExpand /> QUAY LẠI TOÀN MÀN HÌNH NGAY
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 2. Tab Switch Violation Modal (When returning from another tab or window) */}
-      {showViolationModal && (
-        <div className="entrance-overlay" style={{ zIndex: 99998 }}>
-          <div className="entrance-modal text-center p-4 border border-warning shadow-lg" style={{ maxWidth: '460px' }}>
-            <div className="d-inline-flex p-3 rounded-circle bg-danger bg-opacity-10 text-danger mb-2">
-              <FaExclamationTriangle size={48} />
-            </div>
-            <h4 className="fw-bold text-danger mb-1">CẢNH BÁO VI PHẠM THI!</h4>
-            <p className="text-dark fw-semibold mb-2">
-              Hệ thống phát hiện bạn vừa rời khỏi màn hình bài thi hoặc chuyển tab khác!
-            </p>
-
-            <div className="p-3 bg-light rounded-3 my-3 text-start small border border-danger border-opacity-50">
-              <div className="d-flex justify-content-between mb-1">
-                <span className="text-secondary">Số lần vi phạm:</span>
-                <strong className="text-danger fs-6">{tabSwitches} / {MAX_VIOLATIONS} lần</strong>
-              </div>
-              <p className="mb-0 text-danger small">
-                {tabSwitches >= MAX_VIOLATIONS
-                  ? 'Bạn đã hết số lần vi phạm! Bài thi đang được tự động thu bài...'
-                  : `Cảnh báo: Nếu bạn rời khỏi màn hình thêm ${MAX_VIOLATIONS - tabSwitches} lần nữa, bài thi sẽ bị TỰ ĐỘNG NỘP VÀ HỦY KẾT QUẢ!`}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              className="btn btn-primary-custom w-100 py-2 fw-bold"
-              onClick={() => {
-                setShowViolationModal(false)
-                enterFullscreen()
-              }}
-            >
-              Tôi Đã Hiểu Và Tiếp Tục Làm Bài
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 3. Confirmation Submit Modal */}
+      {/* Confirmation Submit Modal */}
       {showConfirmModal && (
         <div className="entrance-overlay">
           <div className="entrance-modal">
@@ -620,10 +562,6 @@ function QuizPage() {
                 <span>Số câu chưa làm:</span>
                 <strong className="text-danger">{allQuestions.length - answeredCount}</strong>
               </div>
-              <div className="d-flex justify-content-between mb-2">
-                <span>Số lần rời tab:</span>
-                <strong className={tabSwitches > 0 ? 'text-danger' : 'text-success'}>{tabSwitches} lần</strong>
-              </div>
               <div className="d-flex justify-content-between">
                 <span>Thời gian còn lại:</span>
                 <strong>{formatTime(timeLeft)}</strong>
@@ -641,7 +579,7 @@ function QuizPage() {
                 className="btn btn-danger-custom flex-1"
                 onClick={() => {
                   setShowConfirmModal(false)
-                  executeSubmit()
+                  executeSubmit(0, 'Thí sinh chủ động bấm nộp bài')
                 }}
               >
                 Nộp bài ngay
