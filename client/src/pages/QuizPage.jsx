@@ -30,10 +30,25 @@ function QuizPage() {
   const [drawerFilter, setDrawerFilter] = useState('all') // 'all' | 'unanswered'
   const [passageExpanded, setPassageExpanded] = useState(true)
 
-  // Strict Anti-Cheat: Zero tolerance (Exit or Tab switch = IMMEDIATE auto-submit)
+  // 3-Warning Proctoring System: Warn students up to 3 times before auto-submitting
+  const MAX_VIOLATIONS = 3
+  const [violationsCount, setViolationsCount] = useState(0)
+  const [showViolationModal, setShowViolationModal] = useState(false)
+  const [violationReason, setViolationReason] = useState('')
+
   const isSubmittingRef = useRef(false)
   const startedRef = useRef(false)
   const enteredFullscreenRef = useRef(false)
+  const violationsCountRef = useRef(0)
+  const showViolationModalRef = useRef(false)
+
+  useEffect(() => {
+    violationsCountRef.current = violationsCount
+  }, [violationsCount])
+
+  useEffect(() => {
+    showViolationModalRef.current = showViolationModal
+  }, [showViolationModal])
 
   useEffect(() => {
     startedRef.current = started
@@ -149,26 +164,42 @@ function QuizPage() {
     }
   }
 
-  // Strict Anti-Cheat Listeners (IMMEDIATE submit on exit or tab switch)
+  // Warning Proctoring: Warn up to 3 times before auto-submitting
+  const handleViolation = useCallback((reason) => {
+    if (!startedRef.current || isSubmittingRef.current || showViolationModalRef.current) return
+
+    const newCount = violationsCountRef.current + 1
+    violationsCountRef.current = newCount
+    setViolationsCount(newCount)
+
+    if (newCount >= MAX_VIOLATIONS) {
+      toast.error(`❌ BẠN ĐÃ VI PHẠM QUY CHẾ QUÁ ${MAX_VIOLATIONS} LẦN! Hệ thống tự động thu bài.`)
+      executeSubmit(newCount, `Bị thu bài do vi phạm quy chế quá ${MAX_VIOLATIONS} lần (${reason})`)
+    } else {
+      setViolationReason(reason)
+      setShowViolationModal(true)
+      toast.warning(`⚠️ CẢNH BÁO VI PHẠM (Lần ${newCount}/${MAX_VIOLATIONS}): ${reason}`)
+    }
+  }, [MAX_VIOLATIONS])
+
+  // Proctoring Listeners with Fair Warning System
   useEffect(() => {
     if (!started) return
 
-    // 1. Detect exiting fullscreen mode -> Submit immediately!
+    // 1. Detect exiting fullscreen mode -> Warn student!
     const handleFullscreenChange = () => {
       const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement)
       if (isFS) {
         enteredFullscreenRef.current = true
       } else if (enteredFullscreenRef.current && startedRef.current && !isSubmittingRef.current) {
-        toast.error('❌ BẠN ĐÃ THOÁT TOÀN MÀN HÌNH! Hệ thống lập tức thu bài thi theo quy chế.')
-        executeSubmit(1, 'Bị thu bài ngay lập tức do thoát chế độ toàn màn hình')
+        handleViolation('Thoát chế độ toàn màn hình')
       }
     }
 
-    // 2. Detect switching tab, minimizing, or switching apps on mobile -> Submit immediately!
+    // 2. Detect switching tab, minimizing, or switching apps on mobile -> Warn student!
     const handleVisibilityChange = () => {
       if (document.hidden && startedRef.current && !isSubmittingRef.current) {
-        toast.error('❌ BẠN ĐÃ RỜI KHỎI MÀN HÌNH BÀI THI! Hệ thống lập tức thu bài thi theo quy chế.')
-        executeSubmit(1, 'Bị thu bài ngay lập tức do chuyển tab hoặc mở ứng dụng khác')
+        handleViolation('Rời khỏi màn hình bài thi / Chuyển sang tab hoặc ứng dụng khác')
       }
     }
 
@@ -198,8 +229,7 @@ function QuizPage() {
       e.preventDefault()
       window.history.pushState(null, '', window.location.href)
       if (startedRef.current && !isSubmittingRef.current) {
-        toast.error('❌ BẠN ĐÃ BẤM QUAY LẠI TRANG! Bài thi lập tức bị thu bài theo quy chế.')
-        executeSubmit(1, 'Bị thu bài ngay lập tức do bấm nút Quay lại (Back)')
+        handleViolation('Bấm nút Quay lại (Back) của trình duyệt')
       }
     }
 
@@ -207,14 +237,12 @@ function QuizPage() {
     const handleWindowBlur = () => {
       if (startedRef.current && !isSubmittingRef.current) {
         if (document.hidden) {
-          toast.error('❌ CỬA SỔ BÀI THI BỊ MẤT TIÊU ĐIỂM! Bài thi lập tức bị thu bài do chuyển tab/ứng dụng.')
-          executeSubmit(1, 'Bị thu bài ngay lập tức do chuyển cửa sổ hoặc mở ứng dụng khác')
+          handleViolation('Mất tiêu điểm cửa sổ bài thi / Mở ứng dụng khác')
         } else {
           // On touch devices (iOS/Android), scrolling might fire blur during URL bar collapse. Only penalize if not touch device.
           const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0
           if (!isTouch) {
-            toast.error('❌ CỬA SỔ BÀI THI BỊ MẤT TIÊU ĐIỂM! Bài thi lập tức bị thu bài do chuyển cửa sổ/click ra ngoài.')
-            executeSubmit(1, 'Bị thu bài ngay lập tức do chuyển cửa sổ hoặc click ra ngoài bài thi')
+            handleViolation('Click chuột ra ngoài cửa sổ bài thi')
           }
         }
       }
@@ -348,22 +376,22 @@ function QuizPage() {
             <p className="text-secondary small">{quiz.title}</p>
           </div>
 
-          {/* Strict Anti-cheat zero tolerance notice */}
-          <div className="p-3 mb-3 rounded-3 bg-danger bg-opacity-10 border border-danger small text-start">
-            <strong className="text-danger d-block mb-1 fs-6">
-              ⛔ CẢNH BÁO BẮT BUỘC (KHÔNG CẢNH BÁO LẦN 2):
+          {/* Proctoring Notice with 3 Warnings */}
+          <div className="p-3 mb-3 rounded-3 bg-warning bg-opacity-10 border border-warning small text-start">
+            <strong className="text-dark d-block mb-1 fs-6">
+              🛡️ QUY CHẾ GIÁM SÁT PHÒNG THI (TỐI ĐA 3 LẦN CẢNH BÁO):
             </strong>
-            <ul className="mb-0 ps-3 text-dark fw-medium">
+            <ul className="mb-0 ps-3 text-dark fw-medium" style={{ fontSize: '0.85rem' }}>
               <li className="mb-1 text-danger fw-bold">
-                BẤM THOÁT MÀN HÌNH HOẶC CHUYỂN TAB SẼ BỊ BẮT NỘP BÀI NGAY LẬP TỨC!
+                Hệ thống cảnh báo tối đa 3 lần. Nếu vi phạm quá 3 lần, bài thi sẽ tự động bị thu bài và chấm điểm!
               </li>
               <li className="mb-1">
-                Trên điện thoại: <strong>Không vuốt về màn hình chính</strong>, không mở Zalo, Messenger, Google, ChatGPT hay từ điển.
+                Các hành vi bị tính vi phạm: Thoát toàn màn hình, chuyển tab, mở app khác (Zalo, Messenger, ChatGPT, Google...).
               </li>
               <li className="mb-1">
-                Trên máy tính: <strong>Không bấm phím Esc</strong>, không chuyển cửa sổ, không mở tab khác.
+                Khi có cảnh báo vi phạm, hãy bấm <strong>"Tiếp tục làm bài"</strong> ngay để không bị gián đoạn.
               </li>
-              <li>Chức năng sao chép, bôi đen và chuột phải đã bị khóa hoàn toàn.</li>
+              <li>Chức năng sao chép, bôi đen và chuột phải đã bị khóa trong phòng thi.</li>
             </ul>
           </div>
 
@@ -407,8 +435,8 @@ function QuizPage() {
               <span>Thời gian: <strong className="text-primary">{quiz.timeLimit} phút</strong></span>
             </div>
 
-            <button type="submit" className="btn btn-danger-custom w-100 py-3 fs-6 d-flex align-items-center justify-content-center gap-2 fw-bold">
-              <FaExpand /> Tôi Cam Kết Không Thoát Màn Hình & Vào Thi
+            <button type="submit" className="btn btn-primary-custom w-100 py-3 fs-6 d-flex align-items-center justify-content-center gap-2 fw-bold">
+              <FaExpand /> Tôi Đã Hiểu Quy Chế & Bắt Đầu Làm Bài
             </button>
           </form>
         </div>
@@ -441,8 +469,13 @@ function QuizPage() {
               <FaUser className="text-primary" />
               <span className="fw-bold text-dark">{studentInfo.name}</span>
               {studentInfo.studentId && <span className="badge bg-secondary d-none d-sm-inline-block">{studentInfo.studentId}</span>}
-              <span className="badge bg-danger text-white">
-                🛡️ Khóa màn hình: Rời tab = Thu bài ngay
+              <span className={`badge ${
+                violationsCount === 0 ? 'bg-success text-white' :
+                violationsCount === 1 ? 'bg-warning text-dark' :
+                'bg-danger text-white'
+              }`}>
+                🛡️ Vi phạm: {violationsCount}/{MAX_VIOLATIONS}
+                {violationsCount === 0 ? ' (An toàn)' : violationsCount === 1 ? ' (Cảnh cáo lần 1)' : ' (Cảnh cáo lần 2 - Nguy cấp)'}
               </span>
             </div>
 
@@ -486,8 +519,12 @@ function QuizPage() {
             </div>
 
             <div className="d-flex justify-content-between align-items-center small">
-              <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style={{ fontSize: '0.72rem' }}>
-                🛡️ Bảo mật: Rời app = Thu bài
+              <span className={`badge ${
+                violationsCount === 0 ? 'bg-success bg-opacity-10 text-success border border-success' :
+                violationsCount === 1 ? 'bg-warning bg-opacity-10 text-warning border border-warning' :
+                'bg-danger bg-opacity-10 text-danger border border-danger'
+              }`} style={{ fontSize: '0.72rem' }}>
+                ⚠️ Vi phạm: {violationsCount}/{MAX_VIOLATIONS}
               </span>
 
               <button
@@ -827,6 +864,46 @@ function QuizPage() {
                 <FaCheckCircle /> Nộp bài thi ({answeredCount}/{allQuestions.length})
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Violation Warning Modal (Warn up to 3 times before auto-submit) */}
+      {showViolationModal && (
+        <div className="entrance-overlay" style={{ zIndex: 3000 }}>
+          <div className="entrance-modal border border-danger shadow-lg" style={{ maxWidth: '500px' }}>
+            <div className="text-center mb-3">
+              <div className="d-inline-flex p-3 rounded-circle bg-danger bg-opacity-10 text-danger mb-2">
+                <FaExclamationTriangle size={46} className="fa-beat" />
+              </div>
+              <h4 className="fw-bold text-danger mb-1">CẢNH BÁO VI PHẠM QUY CHẾ</h4>
+              <span className="badge bg-danger fs-6 px-3 py-1 rounded-pill">
+                Lần vi phạm: {violationsCount} / {MAX_VIOLATIONS}
+              </span>
+            </div>
+
+            <div className="p-3 mb-3 rounded-3 bg-danger bg-opacity-10 border border-danger border-opacity-25 small">
+              <p className="mb-2 text-dark fw-bold">
+                Hệ thống phát hiện hành vi bất thường:
+              </p>
+              <div className="p-2 bg-white rounded border border-danger text-danger fw-semibold mb-2">
+                ⚠️ {violationReason}
+              </div>
+              <p className="mb-0 text-secondary" style={{ fontSize: '0.85rem' }}>
+                Hành vi này đã được ghi lại trong hồ sơ thi của bạn. Bạn còn <strong>{MAX_VIOLATIONS - violationsCount} lần cảnh báo nữa</strong> trước khi hệ thống tự động thu bài và chấm điểm.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-danger-custom w-100 py-3 fs-6 d-flex align-items-center justify-content-center gap-2 fw-bold"
+              onClick={() => {
+                setShowViolationModal(false)
+                enterFullscreen()
+              }}
+            >
+              <FaExpand /> Tôi Đã Hiểu & Tiếp Tục Làm Bài
+            </button>
           </div>
         </div>
       )}
