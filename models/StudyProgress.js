@@ -17,3 +17,4 @@ const StudyProgressSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('StudyProgress', StudyProgressSchema);
+

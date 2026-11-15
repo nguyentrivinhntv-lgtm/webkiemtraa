@@ -1,17 +1,18 @@
 /* ===== Global Styles ===== */
 :root {
-  --primary: #4361ee;
-  --primary-dark: #3a56d4;
-  --secondary: #7209b7;
-  --success: #06d6a0;
-  --danger: #ef476f;
-  --warning: #ffd166;
-  --bg-light: #f8f9fe;
+  --primary: #0284c7;
+  --primary-dark: #0369a1;
+  --secondary: #0d9488;
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --bg-light: #f0fdf4;
+  --bg-light: #f8fafc;
   --bg-card: #ffffff;
-  --text-primary: #2b2d42;
-  --text-secondary: #6c757d;
-  --shadow: 0 2px 20px rgba(67, 97, 238, 0.08);
-  --shadow-hover: 0 8px 30px rgba(67, 97, 238, 0.15);
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --shadow: 0 4px 20px rgba(2, 132, 199, 0.08);
+  --shadow-hover: 0 8px 30px rgba(2, 132, 199, 0.16);
   --radius: 16px;
   --radius-sm: 10px;
 }
@@ -42,9 +43,9 @@ body {
 
 /* ===== Navbar ===== */
 .navbar-custom {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  background: linear-gradient(135deg, #0369a1 0%, #0284c7 50%, #0d9488 100%);
   padding: 1rem 0;
-  box-shadow: 0 4px 20px rgba(67, 97, 238, 0.3);
+  box-shadow: 0 4px 20px rgba(2, 132, 199, 0.25);
 }
 
 .navbar-custom .navbar-brand {
@@ -104,7 +105,7 @@ body {
 
 .btn-primary-custom:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(67, 97, 238, 0.4);
+  box-shadow: 0 4px 15px rgba(2, 132, 199, 0.35);
   background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
   color: white;
 }
@@ -181,12 +182,12 @@ body {
 }
 
 .badge-mc {
-  background: rgba(67, 97, 238, 0.1);
+  background: rgba(2, 132, 199, 0.12);
   color: var(--primary);
 }
 
 .badge-rc {
-  background: rgba(114, 9, 183, 0.1);
+  background: rgba(13, 148, 136, 0.12);
   color: var(--secondary);
 }
 
@@ -339,7 +340,7 @@ body {
 
 .question-nav-btn.current {
   border-color: var(--secondary);
-  box-shadow: 0 0 0 3px rgba(114, 9, 183, 0.2);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.25);
 }
 
 /* ===== Result ===== */
@@ -639,7 +640,7 @@ body {
 }
 
 [data-theme="dark"] .bottom-nav-item.active {
-  color: #818cf8;
+  color: #38bdf8;
 }
 
 [data-theme="dark"] .entrance-modal {
