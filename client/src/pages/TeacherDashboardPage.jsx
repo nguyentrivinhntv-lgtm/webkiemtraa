@@ -325,6 +325,7 @@ export default function TeacherDashboardPage() {
                   <th>MSSV</th>
                   <th>Điểm Số</th>
                   <th>Số Câu Đúng</th>
+                  <th>Giám Sát Thi</th>
                   <th>Thời Gian</th>
                   <th>Ngày Nộp</th>
                 </tr>
@@ -332,6 +333,7 @@ export default function TeacherDashboardPage() {
               <tbody>
                 {filteredSubmissions.map((sub, idx) => {
                   const s = parseFloat(sub.score) || 0;
+                  const violations = sub.tabSwitches || 0;
                   return (
                     <tr key={sub.id || idx}>
                       <td>{idx + 1}</td>
@@ -350,6 +352,17 @@ export default function TeacherDashboardPage() {
                       </td>
                       <td>
                         <span className="text-success fw-bold">{sub.correctCount}</span> / {sub.totalQuestions}
+                      </td>
+                      <td>
+                        {violations > 0 ? (
+                          <span className="badge bg-danger" title={`Sinh viên này đã rời khỏi màn hình hoặc đổi tab ${violations} lần`}>
+                            ⚠️ Rời tab {violations} lần
+                          </span>
+                        ) : (
+                          <span className="badge bg-success bg-opacity-10 text-success border border-success">
+                            ✓ Không rời tab
+                          </span>
+                        )}
                       </td>
                       <td className="small text-secondary">
                         {Math.floor((sub.timeSpent || 0) / 60)}p {(sub.timeSpent || 0) % 60}s

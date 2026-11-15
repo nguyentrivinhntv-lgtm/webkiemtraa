@@ -21,6 +21,7 @@ const SubmissionSchema = new mongoose.Schema({
   wrongCount: { type: Number, required: true },
   totalQuestions: { type: Number, required: true },
   timeSpent: { type: Number, default: 0 },
+  tabSwitches: { type: Number, default: 0 },
   details: [DetailSchema],
   submittedAt: { type: Date, default: Date.now }
 }, {

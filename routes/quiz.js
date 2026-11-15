@@ -148,6 +148,7 @@ router.post('/:id/submit', optionalToken, async (req, res) => {
       wrongCount: allQuestions.length - correct,
       totalQuestions: allQuestions.length,
       timeSpent,
+      tabSwitches: parseInt(req.body.tabSwitches) || 0,
       details: quiz.showResult !== false ? details : [],
       submittedAt: new Date().toISOString()
     };

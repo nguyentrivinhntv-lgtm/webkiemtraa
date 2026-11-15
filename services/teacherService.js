@@ -150,6 +150,8 @@ async function generateExcelReport(quizId) {
     'Số câu đúng': sub.correctCount,
     'Số câu sai': sub.wrongCount,
     'Tổng số câu': sub.totalQuestions,
+    'Số lần rời màn hình / đổi tab': sub.tabSwitches || 0,
+    'Giám sát gian lận': (sub.tabSwitches > 0 ? `⚠️ Rời màn hình (${sub.tabSwitches} lần)` : '✓ Bình thường'),
     'Thời gian làm bài (giây)': sub.timeSpent,
     'Ngày nộp bài': sub.submittedAt ? new Date(sub.submittedAt).toLocaleString('vi-VN') : ''
   }));
@@ -166,6 +168,8 @@ async function generateExcelReport(quizId) {
     { wch: 12 }, // Đúng
     { wch: 12 }, // Sai
     { wch: 12 }, // Tổng
+    { wch: 28 }, // Số lần rời màn hình
+    { wch: 24 }, // Giám sát
     { wch: 22 }, // Thời gian
     { wch: 22 }  // Ngày nộp
   ];
