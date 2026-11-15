@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   FaClock, FaCheckCircle, FaUser, FaArrowLeft, FaArrowRight,
   FaListOl, FaExclamationTriangle, FaEye, FaKeyboard,
-  FaShieldAlt, FaExpand, FaBan
+  FaShieldAlt, FaExpand, FaBan, FaTimes, FaChevronUp, FaChevronDown
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { getQuiz, submitQuiz } from '../services/api'
@@ -26,10 +26,14 @@ function QuizPage() {
   const [started, setStarted] = useState(false)
   const [currentQIndex, setCurrentQIndex] = useState(0)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [showDrawer, setShowDrawer] = useState(false)
+  const [drawerFilter, setDrawerFilter] = useState('all') // 'all' | 'unanswered'
+  const [passageExpanded, setPassageExpanded] = useState(true)
 
   // Strict Anti-Cheat: Zero tolerance (Exit or Tab switch = IMMEDIATE auto-submit)
   const isSubmittingRef = useRef(false)
   const startedRef = useRef(false)
+  const enteredFullscreenRef = useRef(false)
 
   useEffect(() => {
     startedRef.current = started
@@ -152,7 +156,9 @@ function QuizPage() {
     // 1. Detect exiting fullscreen mode -> Submit immediately!
     const handleFullscreenChange = () => {
       const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement)
-      if (!isFS && startedRef.current && !isSubmittingRef.current) {
+      if (isFS) {
+        enteredFullscreenRef.current = true
+      } else if (enteredFullscreenRef.current && startedRef.current && !isSubmittingRef.current) {
         toast.error('❌ BẠN ĐÃ THOÁT TOÀN MÀN HÌNH! Hệ thống lập tức thu bài thi theo quy chế.')
         executeSubmit(1, 'Bị thu bài ngay lập tức do thoát chế độ toàn màn hình')
       }
@@ -197,6 +203,51 @@ function QuizPage() {
       }
     }
 
+    // 7. Window Blur (Instantly catch when window loses focus to other tab / app)
+    const handleWindowBlur = () => {
+      if (startedRef.current && !isSubmittingRef.current) {
+        if (document.hidden) {
+          toast.error('❌ CỬA SỔ BÀI THI BỊ MẤT TIÊU ĐIỂM! Bài thi lập tức bị thu bài do chuyển tab/ứng dụng.')
+          executeSubmit(1, 'Bị thu bài ngay lập tức do chuyển cửa sổ hoặc mở ứng dụng khác')
+        } else {
+          // On touch devices (iOS/Android), scrolling might fire blur during URL bar collapse. Only penalize if not touch device.
+          const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+          if (!isTouch) {
+            toast.error('❌ CỬA SỔ BÀI THI BỊ MẤT TIÊU ĐIỂM! Bài thi lập tức bị thu bài do chuyển cửa sổ/click ra ngoài.')
+            executeSubmit(1, 'Bị thu bài ngay lập tức do chuyển cửa sổ hoặc click ra ngoài bài thi')
+          }
+        }
+      }
+    }
+
+    // 8. Prevent mouse side navigation buttons (Mouse 3 & 4: Back / Forward)
+    const handleMouseButtons = (e) => {
+      if (e.button === 3 || e.button === 4) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+
+    // 9. Prevent horizontal swipe gestures (trackpad / sideways mouse wheel swipe)
+    const handleWheel = (e) => {
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        e.preventDefault()
+      }
+    }
+
+    // 10. Prevent browser shortcut keys that navigate (Alt+Left/Right, Ctrl+W, Ctrl+T, Ctrl+R, F5)
+    const handleSpecialKeys = (e) => {
+      if (
+        (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) ||
+        (e.ctrlKey && (e.key === 'r' || e.key === 'R' || e.key === 'w' || e.key === 'W' || e.key === 't' || e.key === 'T' || e.key === 'n' || e.key === 'N')) ||
+        e.key === 'F5' ||
+        e.key === 'F12'
+      ) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -204,6 +255,10 @@ function QuizPage() {
     document.addEventListener('copy', handleCopy)
     window.addEventListener('beforeunload', handleBeforeUnload)
     window.addEventListener('popstate', handlePopState)
+    window.addEventListener('blur', handleWindowBlur)
+    window.addEventListener('mouseup', handleMouseButtons, true)
+    window.addEventListener('wheel', handleWheel, { passive: false })
+    window.addEventListener('keydown', handleSpecialKeys, true)
 
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
@@ -213,6 +268,10 @@ function QuizPage() {
       document.removeEventListener('copy', handleCopy)
       window.removeEventListener('beforeunload', handleBeforeUnload)
       window.removeEventListener('popstate', handlePopState)
+      window.removeEventListener('blur', handleWindowBlur)
+      window.removeEventListener('mouseup', handleMouseButtons, true)
+      window.removeEventListener('wheel', handleWheel)
+      window.removeEventListener('keydown', handleSpecialKeys, true)
     }
   }, [started])
 
@@ -372,11 +431,12 @@ function QuizPage() {
   }
 
   return (
-    <div style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>
+    <div className="exam-room-locked">
       {/* Sticky Header with Timer & Strict Proctoring Badge */}
-      <div className="timer-bar mb-4 shadow-sm border-bottom">
+      <div className="timer-bar mb-3 mb-md-4 shadow-sm border-bottom">
         <div className="container">
-          <div className="d-flex justify-content-between align-items-center py-1">
+          {/* Desktop Top Bar */}
+          <div className="d-none d-md-flex justify-content-between align-items-center py-1">
             <div className="d-flex align-items-center gap-2">
               <FaUser className="text-primary" />
               <span className="fw-bold text-dark">{studentInfo.name}</span>
@@ -402,8 +462,48 @@ function QuizPage() {
             </button>
           </div>
 
+          {/* Mobile Top Bar */}
+          <div className="d-md-none py-1">
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <div className="d-flex align-items-center gap-1 text-truncate" style={{ maxWidth: '125px' }}>
+                <FaUser className="text-primary flex-shrink-0" size={13} />
+                <span className="fw-bold text-dark text-truncate small">{studentInfo.name}</span>
+              </div>
+
+              <div className={`timer-pill-mobile ${
+                timeLeft < 300 ? 'danger' : timeLeft < 600 ? 'warning' : ''
+              }`}>
+                <FaClock className="me-1" size={13} />
+                <span>{formatTime(timeLeft)}</span>
+              </div>
+
+              <button
+                className="btn btn-danger-custom btn-sm py-1 px-3 d-flex align-items-center gap-1 fw-bold"
+                onClick={() => setShowConfirmModal(true)}
+              >
+                <FaCheckCircle size={13} /> Nộp bài
+              </button>
+            </div>
+
+            <div className="d-flex justify-content-between align-items-center small">
+              <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style={{ fontSize: '0.72rem' }}>
+                🛡️ Bảo mật: Rời app = Thu bài
+              </span>
+
+              <button
+                type="button"
+                className="btn btn-light btn-sm border d-flex align-items-center gap-1 py-1 px-2 text-dark fw-semibold"
+                style={{ fontSize: '0.75rem' }}
+                onClick={() => setShowDrawer(true)}
+              >
+                <FaListOl className="text-primary" size={12} />
+                <span>Mục lục: <strong>{answeredCount}/{allQuestions.length}</strong></span>
+              </button>
+            </div>
+          </div>
+
           {/* Progress bar */}
-          <div className="progress mt-2" style={{ height: '6px' }}>
+          <div className="progress mt-2" style={{ height: '5px' }}>
             <div
               className="progress-bar bg-success"
               role="progressbar"
@@ -414,20 +514,39 @@ function QuizPage() {
       </div>
 
       <div className="container pb-5">
-        <div className="row g-4">
+        <div className="row g-3 g-md-4">
           {/* Main Question Column */}
-          <div className="col-lg-8">
+          <div className="col-12 col-lg-8">
             {/* Reading Passage Container */}
             {currentPassage && (
-              <div className="card-custom mb-4 border border-warning border-opacity-50">
-                <div className="card-header bg-warning bg-opacity-10 border-bottom border-warning border-opacity-25 py-3">
-                  <h6 className="fw-bold text-dark mb-0">📖 {currentPassage.title}</h6>
+              <div className="card-custom mb-3 border border-warning border-opacity-50">
+                <div
+                  className="card-header bg-warning bg-opacity-10 border-bottom border-warning border-opacity-25 py-2 px-3 d-flex justify-content-between align-items-center"
+                  onClick={() => setPassageExpanded(prev => !prev)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <h6 className="fw-bold text-dark mb-0 small d-flex align-items-center gap-2">
+                    📖 <span>{currentPassage.title}</span>
+                  </h6>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary py-0 px-2 d-flex align-items-center gap-1"
+                    style={{ fontSize: '0.75rem' }}
+                  >
+                    {passageExpanded ? (
+                      <>Thu gọn <FaChevronUp size={10} /></>
+                    ) : (
+                      <>Xem bài đọc <FaChevronDown size={10} /></>
+                    )}
+                  </button>
                 </div>
-                <div className="card-body p-4">
-                  <p className="lh-lg mb-0 text-dark" style={{ whiteSpace: 'pre-line', fontSize: '1.02rem' }}>
-                    {currentPassage.text}
-                  </p>
-                </div>
+                {passageExpanded && (
+                  <div className="card-body p-3 p-md-4 passage-body-scroll">
+                    <p className="lh-base mb-0 text-dark" style={{ whiteSpace: 'pre-line', fontSize: '0.96rem' }}>
+                      {currentPassage.text}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -452,7 +571,7 @@ function QuizPage() {
                   )}
                 </div>
 
-                <h5 className="fw-bold mb-4 text-dark lh-base">
+                <h5 className="fw-bold mb-3 mb-md-4 text-dark lh-base">
                   {currentQ.question}
                 </h5>
 
@@ -475,33 +594,57 @@ function QuizPage() {
                 </div>
 
                 {/* Navigation Controls */}
-                <div className="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                <div className="d-flex justify-content-between align-items-center mt-3 mt-md-4 pt-3 border-top">
                   <button
-                    className="btn btn-outline-secondary px-4"
+                    className="btn btn-outline-secondary px-3 px-md-4"
                     disabled={currentQIndex === 0}
-                    onClick={() => setCurrentQIndex(prev => prev - 1)}
+                    onClick={() => {
+                      setCurrentQIndex(prev => Math.max(0, prev - 1))
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
                   >
-                    <FaArrowLeft className="me-2" /> Câu trước
+                    <FaArrowLeft className="me-1 me-md-2" />
+                    <span className="d-none d-sm-inline">Câu </span>trước
                   </button>
 
-                  <span className="text-secondary small">
+                  <button
+                    type="button"
+                    className="btn btn-light border d-sm-none small py-1 px-2"
+                    onClick={() => setShowDrawer(true)}
+                  >
+                    <FaListOl className="text-primary me-1" /> {currentQIndex + 1}/{allQuestions.length}
+                  </button>
+
+                  <span className="text-secondary small d-none d-sm-inline">
                     {currentQIndex + 1} trên {allQuestions.length}
                   </span>
 
-                  <button
-                    className="btn btn-primary-custom px-4"
-                    disabled={currentQIndex === allQuestions.length - 1}
-                    onClick={() => setCurrentQIndex(prev => prev + 1)}
-                  >
-                    Câu tiếp <FaArrowRight className="ms-2" />
-                  </button>
+                  {currentQIndex < allQuestions.length - 1 ? (
+                    <button
+                      className="btn btn-primary-custom px-3 px-md-4"
+                      onClick={() => {
+                        setCurrentQIndex(prev => Math.min(allQuestions.length - 1, prev + 1))
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                      }}
+                    >
+                      <span className="d-none d-sm-inline">Câu </span>tiếp
+                      <FaArrowRight className="ms-1 ms-md-2" />
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-danger-custom px-3 px-md-4 fw-bold"
+                      onClick={() => setShowConfirmModal(true)}
+                    >
+                      Nộp bài <FaCheckCircle className="ms-1 ms-md-2" />
+                    </button>
+                  )}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Question Map Sidebar */}
-          <div className="col-lg-4">
+          {/* Question Map Sidebar - Desktop Only (Hidden on mobile to avoid duplicate bottom clutter) */}
+          <div className="col-lg-4 d-none d-lg-block">
             <div className="card-custom p-4 sticky-top" style={{ top: '80px' }}>
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <h6 className="fw-bold mb-0 d-flex align-items-center gap-2">
@@ -521,7 +664,10 @@ function QuizPage() {
                     <button
                       key={index}
                       className={`question-nav-btn ${isAnswered ? 'answered' : ''} ${isCurrent ? 'current' : ''}`}
-                      onClick={() => setCurrentQIndex(index)}
+                      onClick={() => {
+                        setCurrentQIndex(index)
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                      }}
                       title={`Câu ${index + 1}`}
                     >
                       {index + 1}
@@ -556,40 +702,171 @@ function QuizPage() {
         </div>
       </div>
 
+      {/* Fixed Mobile Bottom Exam Navigation Bar */}
+      <div className="exam-mobile-bottom-bar d-flex d-md-none">
+        <button
+          type="button"
+          className="btn btn-light border flex-1 d-flex align-items-center justify-content-center gap-1 py-2 fw-semibold"
+          disabled={currentQIndex === 0}
+          onClick={() => {
+            setCurrentQIndex(prev => Math.max(0, prev - 1))
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+          }}
+        >
+          <FaArrowLeft size={12} /> <span>Trước</span>
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-outline-primary flex-1 d-flex align-items-center justify-content-center gap-1 py-2 fw-bold"
+          onClick={() => setShowDrawer(true)}
+        >
+          <FaListOl size={13} />
+          <span>{currentQIndex + 1}/{allQuestions.length}</span>
+        </button>
+
+        {currentQIndex < allQuestions.length - 1 ? (
+          <button
+            type="button"
+            className="btn btn-primary-custom flex-1 d-flex align-items-center justify-content-center gap-1 py-2 fw-semibold"
+            onClick={() => {
+              setCurrentQIndex(prev => Math.min(allQuestions.length - 1, prev + 1))
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          >
+            <span>Tiếp</span> <FaArrowRight size={12} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-danger-custom flex-1 d-flex align-items-center justify-content-center gap-1 py-2 fw-bold"
+            onClick={() => setShowConfirmModal(true)}
+          >
+            <span>Nộp bài</span> <FaCheckCircle size={12} />
+          </button>
+        )}
+      </div>
+
+      {/* Mobile Question Sheet / Drawer */}
+      {showDrawer && (
+        <div className="exam-drawer-overlay" onClick={() => setShowDrawer(false)}>
+          <div className="exam-drawer" onClick={e => e.stopPropagation()}>
+            <div className="exam-drawer-header">
+              <div>
+                <h6 className="fw-bold mb-0 d-flex align-items-center gap-2">
+                  <FaListOl className="text-primary" /> Mục lục câu hỏi
+                </h6>
+                <small className="text-secondary">
+                  Đã làm: <strong className="text-success">{answeredCount}</strong> / {allQuestions.length} ({progressPercent}%)
+                </small>
+              </div>
+              <button
+                type="button"
+                className="btn-close"
+                onClick={() => setShowDrawer(false)}
+              />
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="d-flex gap-2 p-2 px-3 bg-light border-bottom">
+              <button
+                type="button"
+                className={`btn btn-sm ${drawerFilter === 'all' ? 'btn-primary' : 'btn-outline-secondary'} flex-1 fw-semibold`}
+                onClick={() => setDrawerFilter('all')}
+              >
+                Tất cả ({allQuestions.length})
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${drawerFilter === 'unanswered' ? 'btn-danger' : 'btn-outline-secondary'} flex-1 fw-semibold`}
+                onClick={() => setDrawerFilter('unanswered')}
+              >
+                Chưa làm ({allQuestions.length - answeredCount})
+              </button>
+            </div>
+
+            {/* Drawer Body - Question bubbles */}
+            <div className="exam-drawer-body">
+              <div className="question-nav justify-content-center">
+                {allQuestions.map((_, index) => {
+                  const isAnswered = answers[index] !== undefined
+                  const isCurrent = currentQIndex === index
+
+                  if (drawerFilter === 'unanswered' && isAnswered) {
+                    return null
+                  }
+
+                  return (
+                    <button
+                      key={index}
+                      type="button"
+                      className={`question-nav-btn ${isAnswered ? 'answered' : ''} ${isCurrent ? 'current' : ''}`}
+                      onClick={() => {
+                        setCurrentQIndex(index)
+                        setShowDrawer(false)
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                      }}
+                    >
+                      {index + 1}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="exam-drawer-footer">
+              <button
+                type="button"
+                className="btn btn-danger-custom w-100 py-2 d-flex align-items-center justify-content-center gap-2 fw-bold"
+                onClick={() => {
+                  setShowDrawer(false)
+                  setShowConfirmModal(true)
+                }}
+              >
+                <FaCheckCircle /> Nộp bài thi ({answeredCount}/{allQuestions.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Confirmation Submit Modal */}
       {showConfirmModal && (
         <div className="entrance-overlay">
           <div className="entrance-modal">
             <div className="text-center mb-3">
-              <FaExclamationTriangle size={48} className="text-warning mb-2" />
+              <FaExclamationTriangle size={44} className="text-warning mb-2" />
               <h4 className="fw-bold">Xác Nhận Nộp Bài</h4>
-              <p className="text-secondary mb-0">Bạn có chắc chắn muốn kết thúc bài thi không?</p>
+              <p className="text-secondary small mb-0">Bạn có chắc chắn muốn kết thúc bài thi không?</p>
             </div>
 
             <div className="p-3 bg-light rounded-3 my-3">
-              <div className="d-flex justify-content-between mb-2">
-                <span>Số câu đã làm:</span>
+              <div className="d-flex justify-content-between mb-2 small">
+                <span className="text-secondary">Số câu đã làm:</span>
                 <strong className="text-success">{answeredCount} / {allQuestions.length}</strong>
               </div>
-              <div className="d-flex justify-content-between mb-2">
-                <span>Số câu chưa làm:</span>
-                <strong className="text-danger">{allQuestions.length - answeredCount}</strong>
+              <div className="d-flex justify-content-between mb-2 small">
+                <span className="text-secondary">Số câu chưa làm:</span>
+                <strong className="text-danger">{allQuestions.length - answeredCount} câu</strong>
               </div>
-              <div className="d-flex justify-content-between">
-                <span>Thời gian còn lại:</span>
-                <strong>{formatTime(timeLeft)}</strong>
+              <div className="d-flex justify-content-between small">
+                <span className="text-secondary">Thời gian còn lại:</span>
+                <strong className="text-primary">{formatTime(timeLeft)}</strong>
               </div>
             </div>
 
             <div className="d-flex gap-2">
               <button
-                className="btn btn-outline-secondary flex-1"
+                type="button"
+                className="btn btn-outline-secondary flex-1 py-2 fw-semibold"
                 onClick={() => setShowConfirmModal(false)}
               >
                 Tiếp tục làm
               </button>
               <button
-                className="btn btn-danger-custom flex-1"
+                type="button"
+                className="btn btn-danger-custom flex-1 py-2 fw-bold"
                 onClick={() => {
                   setShowConfirmModal(false)
                   executeSubmit(0, 'Thí sinh chủ động bấm nộp bài')
