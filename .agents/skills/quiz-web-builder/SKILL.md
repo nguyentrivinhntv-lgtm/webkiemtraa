@@ -18,7 +18,7 @@ Skill này quy định toàn bộ tiêu chuẩn kiến trúc, quy tắc phân t�
 |---|---|---|
 | **Frontend** | React (Vite) + Bootstrap 5 + React Icons + React-Toastify | SPA hiện đại, responsive mobile & desktop, component-based |
 | **Backend** | Node.js + Express 5 + Multer + Mammoth.js | REST API, xử lý upload docx, phân tích cú pháp, chấm điểm |
-| **Lưu trữ** | JSON Storage (`data/quizzes.json`) | Nhẹ, dễ backup, không phụ thuộc service ngoài |
+| **Cơ sở dữ liệu** | **MongoDB Atlas** (Mongoose) + Fallback JSON | Lưu trữ vĩnh viễn trên Cloud, tự động đồng bộ khi DB trống |
 | **Cổng kết nối** | Port 3001 (Backend) & Port 3000 (Vite Dev Server) | Độc lập: Frontend gọi Backend qua biến `VITE_API_URL` |
 
 ---
@@ -96,6 +96,11 @@ Hệ thống được thiết kế theo chuẩn tách biệt (Decoupled Fullstac
 - **Chọn file trên điện thoại**: Thuộc tính `accept` của thẻ file input phải chứa đầy đủ MIME type:
   `accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"` để trình duyệt Android/iOS không bị vô hiệu hóa chọn file.
 - **Hỗ trợ Dán Trực Tiếp (Copy/Paste)**: Cung cấp thêm tab dán văn bản câu hỏi trực tiếp để người dùng điện thoại có thể copy từ Zalo, Word, Notes mà không cần lục tìm vị trí lưu file `.docx`.
+
+### 🚨 Ràng buộc 7: Cơ Sở Dữ Liệu Lai (Hybrid Database & MongoDB Fallback)
+- **Mongoose & MongoDB**: Sử dụng biến môi trường `MONGODB_URI` để kết nối MongoDB Atlas.
+- **Cơ chế Fallback an toàn**: Nếu chưa có `MONGODB_URI` hoặc mất kết nối, hệ thống **bắt buộc** tự động chuyển sang đọc/ghi file `data/quizzes.json` để server không bao giờ bị dừng hoặc crash.
+- **Tự động gieo dữ liệu (Auto-seeding)**: Khi MongoDB kết nối lần đầu và collection `quizzes` còn rỗng, hệ thống tự động import 2 bộ đề mẫu từ `data/quizzes.json` vào MongoDB.
 
 ---
 

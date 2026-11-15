@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { parseWordFile, parseText } = require('../utils/wordParser');
+const quizService = require('../services/quizService');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -28,24 +29,10 @@ const upload = multer({
     }
     cb(null, true);
   },
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  limits: { fileSize: 15 * 1024 * 1024 } // 15MB
 });
 
-const dataFile = path.join(__dirname, '..', 'data', 'quizzes.json');
-
-function loadQuizzes() {
-  if (!fs.existsSync(dataFile)) {
-    fs.writeFileSync(dataFile, '[]', 'utf-8');
-    return [];
-  }
-  return JSON.parse(fs.readFileSync(dataFile, 'utf-8'));
-}
-
-function saveQuizzes(data) {
-  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), 'utf-8');
-}
-
-// POST /api/upload - Upload and parse Word file
+// POST /api/upload - Upload and parse Word file (.docx)
 router.post('/', upload.single('wordFile'), async (req, res) => {
   try {
     if (!req.file) {
@@ -96,8 +83,8 @@ router.post('/text', (req, res) => {
   }
 });
 
-// POST /api/upload/confirm - Confirm and save quiz
-router.post('/confirm', (req, res) => {
+// POST /api/upload/confirm - Confirm and save quiz to database (MongoDB / JSON)
+router.post('/confirm', async (req, res) => {
   try {
     const { quizData, settings } = req.body;
 
@@ -105,7 +92,6 @@ router.post('/confirm', (req, res) => {
       return res.status(400).json({ error: 'Không có dữ liệu bài thi' });
     }
 
-    const quizzes = loadQuizzes();
     const quiz = {
       id: uuidv4(),
       title: settings?.title || quizData.title || 'Bài kiểm tra',
@@ -120,8 +106,7 @@ router.post('/confirm', (req, res) => {
       passages: quizData.passages || []
     };
 
-    quizzes.push(quiz);
-    saveQuizzes(quizzes);
+    await quizService.createQuiz(quiz);
 
     res.json({ success: true, quizId: quiz.id });
   } catch (err) {
@@ -131,4 +116,3 @@ router.post('/confirm', (req, res) => {
 });
 
 module.exports = router;
-
