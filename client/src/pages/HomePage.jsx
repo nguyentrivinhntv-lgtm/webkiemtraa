@@ -53,13 +53,22 @@ function HomePage() {
   return (
     <div className="container py-3">
       {/* Hero Section */}
-      <div className="text-center mb-4 mb-md-5">
+      <div className="text-center mb-4 mb-md-4">
         <h1 className="fw-bold mb-2 fs-2 fs-md-1">
-          🎓 Hệ Thống Kiểm Tra Trắc Nghiệm
+          🎓 Hệ Thống Học Tập & Kiểm Tra Trắc Nghiệm
         </h1>
-        <p className="text-secondary fs-6 mb-0">
-          Chọn bài thi để ôn tập trước hoặc bấm vào thi chính thức. Chúc bạn đạt kết quả cao!
+        <p className="text-secondary fs-6 mb-3">
+          Học Flashcard lật thẻ, ôn tập câu hỏi theo bài và làm bài thi chính thức.
         </p>
+
+        <div className="d-flex justify-content-center gap-2 flex-wrap">
+          <Link to="/bookmarks" className="btn btn-outline-warning btn-sm rounded-pill px-3 py-1 text-dark fw-semibold d-flex align-items-center gap-2">
+            <span>⭐</span> Câu hỏi đã đánh dấu
+          </Link>
+          <Link to="/profile" className="btn btn-outline-primary btn-sm rounded-pill px-3 py-1 fw-semibold d-flex align-items-center gap-2">
+            <span>📊</span> Lịch sử bài làm cá nhân
+          </Link>
+        </div>
       </div>
 
       {/* Quiz List */}
@@ -107,19 +116,29 @@ function HomePage() {
                   </div>
 
                   {/* Main Action Buttons */}
-                  <div className="d-flex gap-2 mb-2">
-                    <Link
-                      to={`/review/${quiz.id}`}
-                      className="btn btn-outline-primary flex-fill d-flex align-items-center justify-content-center gap-1 py-2 fw-semibold"
-                      style={{ borderRadius: '10px' }}
-                    >
-                      <FaBookReader /> Ôn tập
-                    </Link>
+                  <div className="d-flex flex-column gap-2 mb-2">
+                    <div className="d-flex gap-2">
+                      <Link
+                        to={`/flashcards/${quiz.id}`}
+                        className="btn btn-outline-warning flex-fill d-flex align-items-center justify-content-center gap-1 py-2 fw-semibold text-dark"
+                        style={{ borderRadius: '10px' }}
+                      >
+                        🃏 Flashcard
+                      </Link>
+                      <Link
+                        to={`/review/${quiz.id}`}
+                        className="btn btn-outline-primary flex-fill d-flex align-items-center justify-content-center gap-1 py-2 fw-semibold"
+                        style={{ borderRadius: '10px' }}
+                      >
+                        <FaBookReader /> Ôn tập
+                      </Link>
+                    </div>
+
                     <Link
                       to={`/quiz/${quiz.id}`}
-                      className="btn btn-primary-custom flex-fill d-flex align-items-center justify-content-center gap-1 py-2 fw-semibold"
+                      className="btn btn-primary-custom w-100 d-flex align-items-center justify-content-center gap-1 py-2 fw-semibold"
                     >
-                      <FaPlay /> Vào thi
+                      <FaPlay /> Vào thi chính thức
                     </Link>
                   </div>
 

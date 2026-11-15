@@ -55,4 +55,13 @@ export const submitQuiz = (id, data) => api.post(`/quiz/${id}/submit`, data);
 export const deleteQuiz = (id) => api.delete(`/quiz/${id}`);
 export const getUserSubmissions = () => api.get('/quiz/user/submissions');
 
+// Study APIs (Bookmarks, Progress, Spaced Repetition)
+export const getBookmarksApi = () => api.get('/study/bookmarks');
+export const toggleBookmarkApi = (data) => api.post('/study/bookmarks/toggle', data);
+export const updateBookmarkNoteApi = (id, note) => api.put(`/study/bookmarks/${id}/note`, { note });
+export const getQuizProgressApi = (quizId) => api.get(`/study/progress/${quizId}`);
+export const saveQuizProgressApi = (quizId, data) => api.post(`/study/progress/${quizId}`, data);
+export const getDueSpacedRepApi = (quizId) => api.get('/study/spaced-rep/due', { params: { quizId } });
+export const submitSpacedRepReviewApi = (cardData, quality) => api.post('/study/spaced-rep/review', { cardData, quality });
+
 export default api;

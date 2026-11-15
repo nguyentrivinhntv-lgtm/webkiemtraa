@@ -8,6 +8,8 @@ import ResultPage from './pages/ResultPage';
 import ReviewPage from './pages/ReviewPage';
 import LoginPage from './pages/LoginPage';
 import ProfilePage from './pages/ProfilePage';
+import FlashcardPage from './pages/FlashcardPage';
+import BookmarksPage from './pages/BookmarksPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -35,6 +37,8 @@ function App() {
                 <Route path="/admin" element={<AdminPage />} />
                 <Route path="/quiz/:id" element={<QuizPage />} />
                 <Route path="/review/:id" element={<ReviewPage />} />
+                <Route path="/flashcards/:id" element={<FlashcardPage />} />
+                <Route path="/bookmarks" element={<BookmarksPage />} />
                 <Route path="/result" element={<ResultPage />} />
               </Routes>
             </main>

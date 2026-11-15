@@ -1,15 +1,21 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   FaArrowLeft, FaArrowRight, FaBookOpen, FaCheck, FaTimes,
-  FaRedo, FaHome, FaRandom, FaEye, FaLightbulb, FaChartBar
+  FaRedo, FaHome, FaRandom, FaEye, FaLightbulb, FaChartBar,
+  FaStar, FaRegStar, FaVolumeUp
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
-import { getQuizAdmin } from '../services/api'
+import {
+  getQuizAdmin, getBookmarksApi, toggleBookmarkApi,
+  getQuizProgressApi, saveQuizProgressApi
+} from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 
 function ReviewPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { isLoggedIn } = useAuth()
 
   const [quiz, setQuiz] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -21,10 +27,52 @@ function ReviewPage() {
   const [shuffle, setShuffle] = useState(false)
   const [filterUnit, setFilterUnit] = useState('all')
   const [showPassage, setShowPassage] = useState(true)
+  const [bookmarkedSet, setBookmarkedSet] = useState(new Set())
+  const [savedResumeInfo, setSavedResumeInfo] = useState(null)
 
   useEffect(() => {
     loadQuiz()
-  }, [id])
+    if (isLoggedIn) {
+      loadBookmarks()
+      checkSavedProgress()
+    }
+  }, [id, isLoggedIn])
+
+  const loadBookmarks = async () => {
+    try {
+      const res = await getBookmarksApi()
+      const currentQuizBm = res.data
+        .filter(b => b.quizId === id)
+        .map(b => b.questionIndex)
+      setBookmarkedSet(new Set(currentQuizBm))
+    } catch (err) {
+      console.warn('Bookmarks load error:', err)
+    }
+  }
+
+  const checkSavedProgress = async () => {
+    try {
+      const res = await getQuizProgressApi(id)
+      if (res.data && res.data.stats && res.data.stats.total > 0) {
+        setSavedResumeInfo(res.data)
+      }
+    } catch (err) {
+      console.warn('Progress load error:', err)
+    }
+  }
+
+  const handleResumeProgress = () => {
+    if (!savedResumeInfo) return
+    setCurrentQIndex(savedResumeInfo.currentQIndex || 0)
+    setAnsweredMap(savedResumeInfo.answeredMap || {})
+    setStats(savedResumeInfo.stats || { correct: 0, wrong: 0, total: 0 })
+    setSavedResumeInfo(null)
+    toast.success('Đã khôi phục tiến trình ôn tập của bạn!')
+  }
+
+  const handleDismissResume = () => {
+    setSavedResumeInfo(null)
+  }
 
   const loadQuiz = async () => {
     try {
@@ -77,15 +125,69 @@ function ReviewPage() {
     setRevealed(true)
 
     const isCorrect = optIndex === currentQ.correctAnswer
-    setStats(prev => ({
-      correct: prev.correct + (isCorrect ? 1 : 0),
-      wrong: prev.wrong + (isCorrect ? 0 : 1),
-      total: prev.total + 1
-    }))
-    setAnsweredMap(prev => ({
-      ...prev,
+    const newStats = {
+      correct: stats.correct + (isCorrect ? 1 : 0),
+      wrong: stats.wrong + (isCorrect ? 0 : 1),
+      total: stats.total + 1
+    }
+    const newMap = {
+      ...answeredMap,
       [currentQIndex]: isCorrect ? 'correct' : 'wrong'
-    }))
+    }
+
+    setStats(newStats)
+    setAnsweredMap(newMap)
+
+    if (isLoggedIn) {
+      saveQuizProgressApi(id, {
+        currentQIndex,
+        answeredMap: newMap,
+        stats: newStats
+      }).catch(err => console.warn('Auto-save progress error:', err))
+    }
+  }
+
+  const handleToggleBookmark = async () => {
+    if (!isLoggedIn) {
+      toast.warning('Vui lòng đăng nhập để lưu câu hỏi khó!')
+      return
+    }
+
+    try {
+      const res = await toggleBookmarkApi({
+        quizId: id,
+        quizTitle: quiz.title,
+        questionIndex: currentQIndex,
+        questionData: {
+          question: currentQ.question,
+          options: currentQ.options,
+          correctAnswer: currentQ.correctAnswer,
+          unit: currentQ.unit || ''
+        }
+      })
+
+      setBookmarkedSet(prev => {
+        const next = new Set(prev)
+        if (res.data.action === 'added') {
+          next.add(currentQIndex)
+          toast.success('⭐ Đã đánh dấu câu hỏi khó!')
+        } else {
+          next.delete(currentQIndex)
+          toast.info('Đã bỏ đánh dấu.')
+        }
+        return next
+      })
+    } catch (err) {
+      toast.error('Lỗi bookmark: ' + err.message)
+    }
+  }
+
+  const handleSpeak = (text) => {
+    if (!window.speechSynthesis) return
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'en-US'
+    window.speechSynthesis.speak(utterance)
   }
 
   const handleNext = () => {
@@ -186,6 +288,13 @@ function ReviewPage() {
         </div>
 
         <div className="d-flex gap-2">
+          <Link
+            to={`/flashcards/${id}`}
+            className="btn btn-sm btn-outline-primary"
+            title="Học bằng flashcard lật thẻ"
+          >
+            🃏 Flashcard
+          </Link>
           <button
             className={`btn btn-sm ${shuffle ? 'btn-warning' : 'btn-outline-secondary'}`}
             onClick={handleToggleShuffle}
@@ -198,6 +307,23 @@ function ReviewPage() {
           </button>
         </div>
       </div>
+
+      {/* Resume Progress Alert Banner */}
+      {savedResumeInfo && (
+        <div className="alert alert-info d-flex justify-content-between align-items-center mb-4 shadow-sm border">
+          <div className="small">
+            <strong>📌 Tiến trình ôn tập đã lưu:</strong> Bạn đã ôn đến câu {savedResumeInfo.currentQIndex + 1} ({savedResumeInfo.stats.correct} đúng, {savedResumeInfo.stats.wrong} sai).
+          </div>
+          <div className="d-flex gap-2">
+            <button className="btn btn-sm btn-outline-secondary" onClick={handleDismissResume}>
+              Ôn lại từ đầu
+            </button>
+            <button className="btn btn-sm btn-primary-custom" onClick={handleResumeProgress}>
+              Tiếp tục học →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stats Bar */}
       <div className="card-custom p-3 mb-4 border">
@@ -272,12 +398,38 @@ function ReviewPage() {
                 <span className="badge bg-light text-secondary border small">
                   {currentQ.unit || currentQ.section || `Câu ${currentQIndex + 1} / ${allQuestions.length}`}
                 </span>
+                {answeredMap[currentQIndex] && (
+                  <span className={`badge ${answeredMap[currentQIndex] === 'correct' ? 'bg-success' : 'bg-danger'}`}>
+                    {answeredMap[currentQIndex] === 'correct' ? '✓ Đúng' : '✗ Sai'}
+                  </span>
+                )}
               </div>
-              {answeredMap[currentQIndex] && (
-                <span className={`badge ${answeredMap[currentQIndex] === 'correct' ? 'bg-success' : 'bg-danger'}`}>
-                  {answeredMap[currentQIndex] === 'correct' ? '✓ Đã trả lời đúng' : '✗ Đã trả lời sai'}
-                </span>
-              )}
+
+              <div className="d-flex align-items-center gap-2">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border rounded-circle"
+                  style={{ width: 32, height: 32 }}
+                  onClick={() => handleSpeak(currentQ.question)}
+                  title="Nghe phát âm tiếng Anh"
+                >
+                  <FaVolumeUp className="text-secondary" />
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-sm btn-light border rounded-circle"
+                  style={{ width: 32, height: 32 }}
+                  onClick={handleToggleBookmark}
+                  title="Đánh dấu câu hỏi khó"
+                >
+                  {bookmarkedSet.has(currentQIndex) ? (
+                    <FaStar className="text-warning" />
+                  ) : (
+                    <FaRegStar className="text-secondary" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <h5 className="fw-bold mb-4 text-dark lh-base">{currentQ.question}</h5>

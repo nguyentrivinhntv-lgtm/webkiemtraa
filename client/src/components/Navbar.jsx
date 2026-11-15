@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   FaGraduationCap, FaHome, FaCog, FaBars, FaTimes,
-  FaSun, FaMoon, FaUser, FaSignOutAlt, FaSignInAlt, FaUserCircle
+  FaSun, FaMoon, FaUser, FaSignOutAlt, FaSignInAlt, FaUserCircle,
+  FaStar
 } from 'react-icons/fa';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -40,6 +41,13 @@ function Navbar() {
               to="/"
             >
               <FaHome /> Trang chủ
+            </Link>
+
+            <Link
+              className={`nav-link-custom ${location.pathname === '/bookmarks' ? 'active' : ''}`}
+              to="/bookmarks"
+            >
+              <FaStar className="text-warning" /> Đã lưu
             </Link>
 
             {/* Admin only for teacher or admin or show link */}
@@ -149,6 +157,13 @@ function Navbar() {
                 <FaHome className="me-2" /> Trang chủ
               </Link>
               <Link
+                className={`mobile-nav-link ${location.pathname === '/bookmarks' ? 'active' : ''}`}
+                to="/bookmarks"
+                onClick={closeMenu}
+              >
+                <FaStar className="me-2 text-warning" /> Câu hỏi đã đánh dấu
+              </Link>
+              <Link
                 className={`mobile-nav-link ${location.pathname === '/admin' ? 'active' : ''}`}
                 to="/admin"
                 onClick={closeMenu}
@@ -195,6 +210,14 @@ function Navbar() {
         >
           <FaHome size={20} />
           <span>Trang chủ</span>
+        </Link>
+        <Link
+          to="/bookmarks"
+          className={`bottom-nav-item ${location.pathname === '/bookmarks' ? 'active' : ''}`}
+          onClick={closeMenu}
+        >
+          <FaStar size={20} className="text-warning" />
+          <span>Đã lưu</span>
         </Link>
         <Link
           to="/admin"

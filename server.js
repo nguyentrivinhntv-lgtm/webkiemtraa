@@ -20,10 +20,12 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const uploadRoutes = require('./routes/upload');
 const quizRoutes = require('./routes/quiz');
 const authRoutes = require('./routes/auth');
+const studyRoutes = require('./routes/study');
 
 app.use('/api/upload', uploadRoutes);
 app.use('/api/quiz', quizRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/study', studyRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

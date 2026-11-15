@@ -33,3 +33,4 @@ export default function ProtectedRoute({ children, requireTeacher = false }) {
 
   return children;
 }
+

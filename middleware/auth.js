@@ -76,3 +76,4 @@ module.exports = {
   signToken,
   JWT_SECRET
 };
+
