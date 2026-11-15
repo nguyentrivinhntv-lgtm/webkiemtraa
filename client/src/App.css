@@ -563,3 +563,91 @@ body {
     padding-bottom: 75px !important;
   }
 }
+
+/* ===== Dark Mode Styles ===== */
+[data-theme="dark"] {
+  --bg-light: #0f172a;
+  --bg-card: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] body {
+  background-color: var(--bg-light);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .card-custom,
+[data-theme="dark"] .question-card {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .text-dark {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .bg-light {
+  background-color: #1e293b !important;
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .border {
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select {
+  background-color: #0f172a;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .form-control:focus,
+[data-theme="dark"] .form-select:focus {
+  background-color: #0f172a;
+  color: #f8fafc;
+  border-color: var(--primary);
+}
+
+[data-theme="dark"] .input-group-text {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .option-btn {
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .option-btn:hover {
+  background: #334155;
+  border-color: var(--primary);
+}
+
+[data-theme="dark"] .mobile-bottom-nav {
+  background: rgba(30, 41, 59, 0.95);
+  border-top-color: #334155;
+}
+
+[data-theme="dark"] .bottom-nav-item {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .bottom-nav-item.active {
+  color: #818cf8;
+}
+
+[data-theme="dark"] .entrance-modal {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .timer-bar {
+  background: #1e293b;
+  border-color: #334155;
+}

@@ -11,6 +11,7 @@ const DetailSchema = new mongoose.Schema({
 
 const SubmissionSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true, index: true },
+  userId: { type: String, default: '', index: true },
   quizId: { type: String, required: true, index: true },
   quizTitle: { type: String, required: true },
   studentName: { type: String, required: true },
@@ -27,3 +28,4 @@ const SubmissionSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('Submission', SubmissionSchema);
+

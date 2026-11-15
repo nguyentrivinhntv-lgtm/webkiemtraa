@@ -1,24 +1,39 @@
-import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { FaGraduationCap, FaHome, FaCog, FaBars, FaTimes } from 'react-icons/fa'
+import { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import {
+  FaGraduationCap, FaHome, FaCog, FaBars, FaTimes,
+  FaSun, FaMoon, FaUser, FaSignOutAlt, FaSignInAlt, FaUserCircle
+} from 'react-icons/fa';
+import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 function Navbar() {
-  const location = useLocation()
-  const [isOpen, setIsOpen] = useState(false)
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, isLoggedIn, isTeacherOrAdmin, logout } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
+  const [isOpen, setIsOpen] = useState(false);
 
-  const toggleMenu = () => setIsOpen(prev => !prev)
-  const closeMenu = () => setIsOpen(false)
+  const toggleMenu = () => setIsOpen(prev => !prev);
+  const closeMenu = () => setIsOpen(false);
+
+  const handleLogout = () => {
+    logout();
+    closeMenu();
+    navigate('/');
+  };
 
   return (
     <>
       <nav className="navbar navbar-custom sticky-top">
         <div className="container d-flex justify-content-between align-items-center">
+          {/* Brand */}
           <Link className="navbar-brand d-flex align-items-center gap-2" to="/" onClick={closeMenu}>
             <FaGraduationCap size={28} />
             <span>QuizMaster</span>
           </Link>
 
-          {/* Desktop Nav */}
+          {/* Desktop Nav Items */}
           <div className="d-none d-md-flex align-items-center gap-2">
             <Link
               className={`nav-link-custom ${location.pathname === '/' ? 'active' : ''}`}
@@ -26,23 +41,90 @@ function Navbar() {
             >
               <FaHome /> Trang chủ
             </Link>
+
+            {/* Admin only for teacher or admin or show link */}
             <Link
               className={`nav-link-custom ${location.pathname === '/admin' ? 'active' : ''}`}
               to="/admin"
             >
               <FaCog /> Quản lý đề thi
             </Link>
+
+            {/* Dark Mode Toggle */}
+            <button
+              className="btn btn-outline-light btn-sm rounded-circle p-2 d-flex align-items-center justify-content-center"
+              style={{ width: 36, height: 36 }}
+              onClick={toggleTheme}
+              title={isDark ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
+            >
+              {isDark ? <FaSun className="text-warning" /> : <FaMoon />}
+            </button>
+
+            {/* User Auth Info */}
+            {isLoggedIn ? (
+              <div className="d-flex align-items-center gap-2 ms-2">
+                <Link
+                  to="/profile"
+                  className="btn btn-light btn-sm rounded-pill px-3 py-1 d-flex align-items-center gap-2 text-dark text-decoration-none shadow-sm"
+                >
+                  <div
+                    className="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold small"
+                    style={{ width: 24, height: 24, fontSize: '0.75rem' }}
+                  >
+                    {user?.name?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                  <span className="fw-semibold small text-truncate" style={{ maxWidth: 120 }}>
+                    {user?.name}
+                  </span>
+                </Link>
+
+                <button
+                  className="btn btn-outline-light btn-sm p-2 rounded-circle"
+                  style={{ width: 36, height: 36 }}
+                  onClick={handleLogout}
+                  title="Đăng xuất"
+                >
+                  <FaSignOutAlt />
+                </button>
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                className="btn btn-light btn-sm rounded-pill px-3 py-1 ms-2 fw-semibold text-primary d-flex align-items-center gap-1 shadow-sm"
+              >
+                <FaSignInAlt /> Đăng nhập
+              </Link>
+            )}
           </div>
 
-          {/* Mobile Right Quick Action & Hamburger */}
+          {/* Mobile Right Controls: Dark Mode + Hamburger */}
           <div className="d-flex d-md-none align-items-center gap-2">
-            <Link
-              to="/admin"
-              className={`btn btn-sm btn-light fw-bold px-3 py-1 text-primary ${location.pathname === '/admin' ? 'border-warning' : ''}`}
-              onClick={closeMenu}
+            <button
+              className="btn btn-outline-light btn-sm rounded-circle p-1 d-flex align-items-center justify-content-center"
+              style={{ width: 32, height: 32 }}
+              onClick={toggleTheme}
             >
-              <FaCog className="me-1" /> Quản lý
-            </Link>
+              {isDark ? <FaSun className="text-warning" size={14} /> : <FaMoon size={14} />}
+            </button>
+
+            {isLoggedIn ? (
+              <Link to="/profile" className="text-white text-decoration-none" onClick={closeMenu}>
+                <div
+                  className="rounded-circle bg-white text-primary d-flex align-items-center justify-content-center fw-bold small"
+                  style={{ width: 30, height: 30, fontSize: '0.8rem' }}
+                >
+                  {user?.name?.charAt(0).toUpperCase()}
+                </div>
+              </Link>
+            ) : (
+              <Link
+                to="/login"
+                className="btn btn-sm btn-light fw-bold px-2 py-1 text-primary small"
+                onClick={closeMenu}
+              >
+                Đăng nhập
+              </Link>
+            )}
 
             <button
               className="btn btn-outline-light btn-sm border-0 px-2 py-1"
@@ -55,7 +137,7 @@ function Navbar() {
           </div>
         </div>
 
-        {/* Mobile Dropdown Menu (Controlled via React State) */}
+        {/* Mobile Dropdown Menu */}
         {isOpen && (
           <div className="d-md-none mobile-nav-dropdown border-top border-white border-opacity-10 py-2 mt-2 w-100">
             <div className="container d-flex flex-column gap-1">
@@ -73,6 +155,32 @@ function Navbar() {
               >
                 <FaCog className="me-2" /> Quản lý & Thêm đề thi
               </Link>
+
+              {isLoggedIn ? (
+                <>
+                  <Link
+                    className={`mobile-nav-link ${location.pathname === '/profile' ? 'active' : ''}`}
+                    to="/profile"
+                    onClick={closeMenu}
+                  >
+                    <FaUser className="me-2" /> Trang cá nhân ({user?.name})
+                  </Link>
+                  <button
+                    className="mobile-nav-link text-danger border-0 bg-transparent text-start w-100"
+                    onClick={handleLogout}
+                  >
+                    <FaSignOutAlt className="me-2" /> Đăng xuất
+                  </button>
+                </>
+              ) : (
+                <Link
+                  className="mobile-nav-link text-white fw-bold"
+                  to="/login"
+                  onClick={closeMenu}
+                >
+                  <FaSignInAlt className="me-2" /> Đăng nhập / Đăng ký
+                </Link>
+              )}
             </div>
           </div>
         )}
@@ -96,9 +204,17 @@ function Navbar() {
           <FaCog size={20} />
           <span>Quản lý</span>
         </Link>
+        <Link
+          to={isLoggedIn ? "/profile" : "/login"}
+          className={`bottom-nav-item ${location.pathname === '/profile' || location.pathname === '/login' ? 'active' : ''}`}
+          onClick={closeMenu}
+        >
+          <FaUserCircle size={20} />
+          <span>{isLoggedIn ? 'Tài khoản' : 'Đăng nhập'}</span>
+        </Link>
       </div>
     </>
-  )
+  );
 }
 
-export default Navbar
+export default Navbar;

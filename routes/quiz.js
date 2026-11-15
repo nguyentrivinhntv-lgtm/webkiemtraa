@@ -2,6 +2,18 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const quizService = require('../services/quizService');
+const { optionalToken, verifyToken } = require('../middleware/auth');
+
+// GET /api/quiz/user/submissions - Get submission history of logged in student
+router.get('/user/submissions', verifyToken, async (req, res) => {
+  try {
+    const list = await quizService.getUserSubmissions(req.user.id);
+    res.json(list);
+  } catch (err) {
+    console.error('Error fetching user submissions:', err);
+    res.status(500).json({ error: 'Lỗi tải lịch sử bài làm' });
+  }
+});
 
 // GET /api/quiz - Get all quizzes (list)
 router.get('/', async (req, res) => {
@@ -82,7 +94,7 @@ router.get('/:id/admin', async (req, res) => {
 });
 
 // POST /api/quiz/:id/submit - Submit quiz answers & grade
-router.post('/:id/submit', async (req, res) => {
+router.post('/:id/submit', optionalToken, async (req, res) => {
   try {
     const quiz = await quizService.getQuizById(req.params.id);
 
@@ -126,10 +138,11 @@ router.post('/:id/submit', async (req, res) => {
     // Save submission to database (MongoDB / JSON)
     const submissionData = {
       id: uuidv4(),
+      userId: req.user ? req.user.id : '',
       quizId: quiz.id,
       quizTitle: quiz.title,
-      studentName: studentName || 'Sinh viên',
-      studentId: studentId || '',
+      studentName: studentName || (req.user ? req.user.name : 'Sinh viên'),
+      studentId: studentId || (req.user ? req.user.studentId : '') || '',
       score,
       correctCount: correct,
       wrongCount: allQuestions.length - correct,

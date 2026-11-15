@@ -119,6 +119,32 @@ function ReviewPage() {
     toast.info('Đã reset tiến trình ôn tập!')
   }
 
+  // Keyboard navigation shortcuts for Review
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        handlePrev()
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        handleNext()
+      } else if (!revealed) {
+        if (['1', 'a', 'A'].includes(e.key)) handleSelect(0)
+        else if (['2', 'b', 'B'].includes(e.key)) handleSelect(1)
+        else if (['3', 'c', 'C'].includes(e.key)) handleSelect(2)
+        else if (['4', 'd', 'D'].includes(e.key)) handleSelect(3)
+      } else if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault()
+        handleNext()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [revealed, currentQIndex, allQuestions.length])
+
   const handleToggleShuffle = () => {
     setShuffle(prev => !prev)
     setCurrentQIndex(0)

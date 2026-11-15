@@ -19,9 +19,11 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Routes
 const uploadRoutes = require('./routes/upload');
 const quizRoutes = require('./routes/quiz');
+const authRoutes = require('./routes/auth');
 
 app.use('/api/upload', uploadRoutes);
 app.use('/api/quiz', quizRoutes);
+app.use('/api/auth', authRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

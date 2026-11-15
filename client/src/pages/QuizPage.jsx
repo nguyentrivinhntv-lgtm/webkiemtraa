@@ -1,24 +1,41 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   FaClock, FaCheckCircle, FaUser, FaArrowLeft, FaArrowRight,
-  FaListOl, FaExclamationTriangle, FaEye
+  FaListOl, FaExclamationTriangle, FaEye, FaKeyboard
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { getQuiz, submitQuiz } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 
 function QuizPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const [quiz, setQuiz] = useState(null)
   const [loading, setLoading] = useState(true)
   const [answers, setAnswers] = useState({})
   const [timeLeft, setTimeLeft] = useState(0)
-  const [studentInfo, setStudentInfo] = useState({ name: '', studentId: '', classRoom: '' })
+  const [studentInfo, setStudentInfo] = useState({
+    name: user?.name || '',
+    studentId: user?.studentId || '',
+    classRoom: user?.classRoom || ''
+  })
   const [started, setStarted] = useState(false)
   const [currentQIndex, setCurrentQIndex] = useState(0)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+
+  // Update studentInfo when user loads
+  useEffect(() => {
+    if (user) {
+      setStudentInfo(prev => ({
+        name: prev.name || user.name || '',
+        studentId: prev.studentId || user.studentId || '',
+        classRoom: prev.classRoom || user.classRoom || ''
+      }))
+    }
+  }, [user])
 
   useEffect(() => {
     loadQuiz()
@@ -74,6 +91,34 @@ function QuizPage() {
       [questionIndex]: optionIndex
     }))
   }
+
+  // Keyboard navigation shortcuts
+  useEffect(() => {
+    if (!started || showConfirmModal) return
+
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        setCurrentQIndex(prev => Math.max(0, prev - 1))
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        setCurrentQIndex(prev => Math.min(allQuestions.length - 1, prev + 1))
+      } else if (['1', 'a', 'A'].includes(e.key)) {
+        handleSelectOption(currentQIndex, 0)
+      } else if (['2', 'b', 'B'].includes(e.key)) {
+        handleSelectOption(currentQIndex, 1)
+      } else if (['3', 'c', 'C'].includes(e.key)) {
+        handleSelectOption(currentQIndex, 2)
+      } else if (['4', 'd', 'D'].includes(e.key)) {
+        handleSelectOption(currentQIndex, 3)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [started, showConfirmModal, currentQIndex, allQuestions.length])
 
   const handleStart = (e) => {
     e.preventDefault()

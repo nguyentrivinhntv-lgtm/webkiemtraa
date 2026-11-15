@@ -56,3 +56,4 @@ function getIsConnected() {
 }
 
 module.exports = { connectDB, getIsConnected };
+

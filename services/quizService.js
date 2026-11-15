@@ -133,11 +133,26 @@ async function getSubmissions(quizId) {
   }
 }
 
+/**
+ * Get submissions by user ID
+ */
+async function getUserSubmissions(userId) {
+  if (!userId) return [];
+  if (getIsConnected()) {
+    return await Submission.find({ userId }).sort({ submittedAt: -1 }).lean();
+  } else {
+    const subs = loadLocalSubmissions();
+    return subs.filter(s => s.userId === userId);
+  }
+}
+
 module.exports = {
   getAllQuizzes,
   getQuizById,
   createQuiz,
   deleteQuiz,
   createSubmission,
-  getSubmissions
+  getSubmissions,
+  getUserSubmissions
 };
+
