@@ -55,6 +55,13 @@ function Navbar() {
               <FaStar className="text-warning" /> Đã lưu
             </Link>
 
+            <Link
+              className={`nav-link-custom ${location.pathname === '/leaderboard' ? 'active' : ''}`}
+              to="/leaderboard"
+            >
+              🏆 Xếp hạng
+            </Link>
+
             {isLoggedIn && (
               <Link
                 className={`nav-link-custom ${location.pathname === '/dashboard' ? 'active' : ''}`}
@@ -184,6 +191,13 @@ function Navbar() {
                 onClick={closeMenu}
               >
                 <FaStar className="me-2 text-warning" /> Câu hỏi đã đánh dấu
+              </Link>
+              <Link
+                className={`mobile-nav-link ${location.pathname === '/leaderboard' ? 'active' : ''}`}
+                to="/leaderboard"
+                onClick={closeMenu}
+              >
+                🏆 Bảng vinh danh & Xếp hạng
               </Link>
               {isLoggedIn && (
                 <Link

@@ -12,6 +12,8 @@ import FlashcardPage from './pages/FlashcardPage';
 import BookmarksPage from './pages/BookmarksPage';
 import StudentDashboardPage from './pages/StudentDashboardPage';
 import TeacherDashboardPage from './pages/TeacherDashboardPage';
+import LeaderboardPage from './pages/LeaderboardPage';
+import ChallengePage from './pages/ChallengePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -50,6 +52,8 @@ function App() {
                 <Route path="/review/:id" element={<ReviewPage />} />
                 <Route path="/flashcards/:id" element={<FlashcardPage />} />
                 <Route path="/bookmarks" element={<BookmarksPage />} />
+                <Route path="/leaderboard" element={<LeaderboardPage />} />
+                <Route path="/challenge/:id" element={<ChallengePage />} />
                 <Route path="/result" element={<ResultPage />} />
               </Routes>
             </main>
