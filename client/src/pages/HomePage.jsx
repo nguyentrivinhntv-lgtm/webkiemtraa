@@ -143,6 +143,24 @@ function HomePage() {
         </div>
       </div>
 
+      {/* Mobile Install App Quick Banner */}
+      <div className="d-flex justify-content-between align-items-center p-3 mb-4 rounded-3 bg-primary bg-opacity-10 border border-primary border-opacity-25 d-md-none">
+        <div className="d-flex align-items-center gap-2">
+          <span className="fs-3">📲</span>
+          <div>
+            <strong className="d-block text-dark small">Cài QuizMaster vào điện thoại</strong>
+            <span className="text-secondary small" style={{ fontSize: '0.78rem' }}>Mở nhanh & làm bài thi toàn màn hình</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="btn btn-primary-custom btn-sm px-3 py-1 fw-bold"
+          onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-install'))}
+        >
+          Cài Đặt
+        </button>
+      </div>
+
       {/* ===== Search & Filter Toolbar ===== */}
       <div className="card-custom p-3 mb-4 border shadow-sm">
         <div className="row g-2 align-items-center justify-content-between">

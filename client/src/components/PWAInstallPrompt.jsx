@@ -1,30 +1,44 @@
 import { useState, useEffect } from 'react';
-import { FaDownload, FaTimes, FaWifi, FaMobileAlt, FaShareSquare, FaPlusSquare } from 'react-icons/fa';
+import {
+  FaDownload, FaTimes, FaWifi, FaMobileAlt, FaShareSquare,
+  FaPlusSquare, FaEllipsisV, FaCheckCircle, FaExclamationTriangle,
+  FaAndroid, FaApple
+} from 'react-icons/fa';
+import { toast } from 'react-toastify';
 
 export default function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [isInstallable, setIsInstallable] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
-  const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [dismissed, setDismissed] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('android'); // 'android', 'ios', 'inapp'
+
+  // Device & Browser detection
+  const ua = (typeof window !== 'undefined' && window.navigator.userAgent) ? window.navigator.userAgent.toLowerCase() : '';
+  const isIOSDevice = /iphone|ipad|ipod/.test(ua);
+  const isInAppBrowser = /zalo|fbav|fban|messenger|instagram|line|micromessenger|tiktok/.test(ua);
+  const isAndroidDevice = /android/.test(ua);
 
   useEffect(() => {
-    // Check if already in standalone app mode
+    // Check standalone mode
     const standaloneMode =
       window.matchMedia('(display-mode: standalone)').matches ||
       window.navigator.standalone === true;
     setIsStandalone(standaloneMode);
 
-    // Check if iOS
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
-    setIsIOS(isIOSDevice);
+    // Initial tab based on detected device
+    if (isInAppBrowser) {
+      setActiveTab('inapp');
+    } else if (isIOSDevice) {
+      setActiveTab('ios');
+    } else {
+      setActiveTab('android');
+    }
 
-    // Check dismissed status in localStorage (within 24 hours)
+    // Check dismissed in localStorage (within 12 hours)
     const lastDismissed = localStorage.getItem('pwa_prompt_dismissed');
-    if (lastDismissed && Date.now() - parseInt(lastDismissed) < 24 * 60 * 60 * 1000) {
+    if (lastDismissed && Date.now() - parseInt(lastDismissed) < 12 * 60 * 60 * 1000) {
       setDismissed(true);
     }
 
@@ -32,10 +46,10 @@ export default function PWAInstallPrompt() {
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setIsInstallable(true);
+      // Auto show banner if not standalone and not dismissed
+      setDismissed(false);
     };
 
-    // Online / Offline listeners
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
@@ -43,22 +57,36 @@ export default function PWAInstallPrompt() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // If app installed, hide prompt
     window.addEventListener('appinstalled', () => {
-      setIsInstallable(false);
       setDeferredPrompt(null);
       setIsStandalone(true);
+      setShowGuideModal(false);
+      toast.success('🎉 Cài đặt QuizMaster thành công! Bạn có thể mở từ màn hình chính.');
     });
 
-    // Custom trigger from Navbar or buttons
+    // Custom trigger from Navbar or any button
     const handleOpenInstall = () => {
-      setDismissed(false);
-      if (isIOS) {
-        setShowIOSGuide(true);
-      } else if (deferredPrompt) {
-        handleInstallClick();
+      if (standaloneMode) {
+        toast.info('🎉 Bạn đang sử dụng ứng dụng QuizMaster trên màn hình chính rồi!');
+        return;
+      }
+
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(({ outcome }) => {
+          if (outcome !== 'accepted') {
+            setShowGuideModal(true);
+          }
+          setDeferredPrompt(null);
+        }).catch(() => {
+          setShowGuideModal(true);
+        });
+      } else {
+        // If browser prompt is not ready or unsupported, ALWAYS show guide modal!
+        setShowGuideModal(true);
       }
     };
+
     window.addEventListener('open-pwa-install', handleOpenInstall);
 
     return () => {
@@ -67,21 +95,23 @@ export default function PWAInstallPrompt() {
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('open-pwa-install', handleOpenInstall);
     };
-  }, []);
+  }, [isInAppBrowser, isIOSDevice]);
 
-  const handleInstallClick = async () => {
-    if (isIOS) {
-      setShowIOSGuide(true);
-      return;
+  const handleInstallClick = () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(({ outcome }) => {
+        if (outcome === 'accepted') {
+          setDeferredPrompt(null);
+        } else {
+          setShowGuideModal(true);
+        }
+      }).catch(() => {
+        setShowGuideModal(true);
+      });
+    } else {
+      setShowGuideModal(true);
     }
-
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setIsInstallable(false);
-    }
-    setDeferredPrompt(null);
   };
 
   const handleDismiss = () => {
@@ -98,17 +128,17 @@ export default function PWAInstallPrompt() {
           style={{ position: 'sticky', top: 0, zIndex: 1060 }}
         >
           <FaWifi className="opacity-75" />
-          <span>Bạn đang ở chế độ Ngoại Tuyến (Offline). Bạn vẫn có thể làm và ôn tập các đề thi đã tải!</span>
+          <span>Bạn đang ngoại tuyến (Offline). Bạn vẫn có thể mở và ôn tập các đề thi đã tải trước đó!</span>
         </div>
       )}
 
-      {/* Install App Banner (Only when not standalone & not dismissed) */}
-      {!isStandalone && !dismissed && (isInstallable || isIOS) && (
+      {/* Install App Floating Banner (Only when not standalone & not dismissed) */}
+      {!isStandalone && !dismissed && (
         <div
-          className="pwa-install-banner shadow-lg border rounded-3 p-3 mx-2 my-2"
+          className="pwa-install-banner shadow-lg border rounded-3 p-3 mx-2 my-2 animate__animated animate__fadeInUp"
           style={{
             position: 'fixed',
-            bottom: '68px', // above mobile thumb nav
+            bottom: '68px',
             left: 0,
             right: 0,
             maxWidth: '520px',
@@ -123,8 +153,8 @@ export default function PWAInstallPrompt() {
               <div
                 className="rounded-3 d-flex align-items-center justify-content-center text-white"
                 style={{
-                  width: '44px',
-                  height: '44px',
+                  width: '42px',
+                  height: '42px',
                   background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
                   flexShrink: 0
                 }}
@@ -136,7 +166,7 @@ export default function PWAInstallPrompt() {
                   Cài Đặt App QuizMaster
                 </h6>
                 <p className="text-secondary mb-0" style={{ fontSize: '0.78rem' }}>
-                  Thêm vào màn hình chính để mở nhanh & làm bài thi mượt mà!
+                  Thêm vào màn hình chính để mở nhanh & làm bài thi toàn màn hình!
                 </p>
               </div>
             </div>
@@ -164,68 +194,176 @@ export default function PWAInstallPrompt() {
         </div>
       )}
 
-      {/* iOS Safari Guide Modal */}
-      {showIOSGuide && (
+      {/* Detailed Install Guide Modal for ALL Platforms */}
+      {showGuideModal && (
         <div
           className="modal fade show d-block"
           tabIndex="-1"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.65)', zIndex: 1070 }}
-          onClick={() => setShowIOSGuide(false)}
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: 1070 }}
+          onClick={() => setShowGuideModal(false)}
         >
           <div className="modal-dialog modal-dialog-centered px-3" onClick={(e) => e.stopPropagation()}>
             <div className="modal-content border-0 shadow-lg rounded-4">
               <div className="modal-header border-bottom py-3">
                 <h6 className="modal-title fw-bold d-flex align-items-center gap-2 text-primary">
-                  <FaMobileAlt /> Cài Đặt QuizMaster Trên iPhone / iPad
+                  <FaMobileAlt /> Hướng Dẫn Cài Đặt QuizMaster Ra Màn Hình
                 </h6>
                 <button
                   type="button"
                   className="btn-close"
-                  onClick={() => setShowIOSGuide(false)}
+                  onClick={() => setShowGuideModal(false)}
                 ></button>
               </div>
-              <div className="modal-body p-4">
-                <p className="small text-secondary mb-3">
-                  Để trải nghiệm ứng dụng toàn màn hình không có thanh địa chỉ Safari:
-                </p>
 
-                <div className="d-flex align-items-start gap-3 mb-3 p-3 bg-light rounded-3">
-                  <span className="badge bg-primary rounded-circle p-2 fs-6">1</span>
-                  <div>
-                    <strong className="d-block text-dark small">Nhấn nút Chia Sẻ trên Safari:</strong>
-                    <span className="text-secondary small d-flex align-items-center gap-1 mt-1">
-                      Chạm vào biểu tượng <FaShareSquare className="text-primary" /> ở thanh công cụ dưới cùng Safari.
-                    </span>
-                  </div>
-                </div>
-
-                <div className="d-flex align-items-start gap-3 mb-3 p-3 bg-light rounded-3">
-                  <span className="badge bg-primary rounded-circle p-2 fs-6">2</span>
-                  <div>
-                    <strong className="d-block text-dark small">Chọn Thêm Vào Màn Hình Chính:</strong>
-                    <span className="text-secondary small d-flex align-items-center gap-1 mt-1">
-                      Cuộn xuống menu và chọn <FaPlusSquare className="text-primary" /> <strong>"Thêm vào MH chính"</strong> (Add to Home Screen).
-                    </span>
-                  </div>
-                </div>
-
-                <div className="d-flex align-items-start gap-3 p-3 bg-light rounded-3">
-                  <span className="badge bg-primary rounded-circle p-2 fs-6">3</span>
-                  <div>
-                    <strong className="d-block text-dark small">Nhấn "Thêm" (Add):</strong>
-                    <span className="text-secondary small mt-1 d-block">
-                      Nhấn nút <strong>Thêm</strong> ở góc trên bên phải để hoàn tất. Biểu tượng QuizMaster sẽ xuất hiện ngay trên màn hình chính!
-                    </span>
-                  </div>
-                </div>
+              {/* Platform Tabs */}
+              <div className="border-bottom bg-light p-2 d-flex gap-1">
+                {isInAppBrowser && (
+                  <button
+                    type="button"
+                    className={`btn btn-sm flex-fill fw-bold py-1 ${activeTab === 'inapp' ? 'btn-danger text-white' : 'btn-outline-secondary bg-white'}`}
+                    onClick={() => setActiveTab('inapp')}
+                    style={{ fontSize: '0.78rem' }}
+                  >
+                    ⚠️ Mở từ Zalo/FB
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`btn btn-sm flex-fill fw-bold py-1 d-flex align-items-center justify-content-center gap-1 ${activeTab === 'android' ? 'btn-primary' : 'btn-outline-secondary bg-white'}`}
+                  onClick={() => setActiveTab('android')}
+                  style={{ fontSize: '0.78rem' }}
+                >
+                  <FaAndroid /> Android / Chrome
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm flex-fill fw-bold py-1 d-flex align-items-center justify-content-center gap-1 ${activeTab === 'ios' ? 'btn-primary' : 'btn-outline-secondary bg-white'}`}
+                  onClick={() => setActiveTab('ios')}
+                  style={{ fontSize: '0.78rem' }}
+                >
+                  <FaApple /> iPhone / iPad
+                </button>
               </div>
+
+              <div className="modal-body p-3 p-md-4">
+                {/* TAB 1: IN-APP BROWSER (Zalo / Facebook / Messenger) */}
+                {activeTab === 'inapp' && (
+                  <div>
+                    <div className="alert alert-warning py-2 px-3 small mb-3 border-warning">
+                      <strong className="d-flex align-items-center gap-1">
+                        <FaExclamationTriangle /> Bạn đang mở link bên trong Zalo / Facebook!
+                      </strong>
+                      Trình duyệt nội bộ của Zalo/Facebook không cho phép cài đặt app trực tiếp. Hãy làm 2 bước sau:
+                    </div>
+
+                    <div className="d-flex align-items-start gap-3 mb-3 p-3 bg-light rounded-3">
+                      <span className="badge bg-danger rounded-circle p-2 fs-6">1</span>
+                      <div>
+                        <strong className="d-block text-dark small">Bấm vào dấu 3 chấm (...) ở góc trên:</strong>
+                        <span className="text-secondary small mt-1 d-block">
+                          Nhìn lên <strong>góc trên cùng bên phải</strong> màn hình Zalo/Facebook, chạm vào biểu tượng <strong>dấu 3 chấm `...`</strong>.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="d-flex align-items-start gap-3 p-3 bg-light rounded-3">
+                      <span className="badge bg-danger rounded-circle p-2 fs-6">2</span>
+                      <div>
+                        <strong className="d-block text-dark small">Chọn "Mở bằng trình duyệt":</strong>
+                        <span className="text-secondary small mt-1 d-block">
+                          Chọn <strong>"Mở bằng trình duyệt"</strong> (Chrome trên Android hoặc Safari trên iPhone) để tiến hành cài đặt ứng dụng.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: ANDROID (Chrome / Cốc Cốc / Samsung Internet) */}
+                {activeTab === 'android' && (
+                  <div>
+                    <p className="small text-secondary mb-3">
+                      Cài đặt ứng dụng trên điện thoại Android (Samsung, Oppo, Xiaomi, Vivo...):
+                    </p>
+
+                    <div className="d-flex align-items-start gap-3 mb-3 p-3 bg-light rounded-3">
+                      <span className="badge bg-primary rounded-circle p-2 fs-6">1</span>
+                      <div>
+                        <strong className="d-block text-dark small">Chạm vào nút 3 chấm ở góc trên:</strong>
+                        <span className="text-secondary small d-flex align-items-center gap-1 mt-1">
+                          Nhấn biểu tượng <FaEllipsisV className="text-primary" /> ở <strong>góc trên bên phải</strong> trình duyệt Chrome.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="d-flex align-items-start gap-3 mb-3 p-3 bg-light rounded-3">
+                      <span className="badge bg-primary rounded-circle p-2 fs-6">2</span>
+                      <div>
+                        <strong className="d-block text-dark small">Chọn Cài đặt ứng dụng / Thêm vào MH chính:</strong>
+                        <span className="text-secondary small d-flex align-items-center gap-1 mt-1">
+                          Cuộn menu xuống và bấm vào dòng <FaDownload className="text-success" /> <strong>"Cài đặt ứng dụng"</strong> (hoặc <strong>"Thêm vào Màn hình chính"</strong>).
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="d-flex align-items-start gap-3 p-3 bg-light rounded-3">
+                      <span className="badge bg-primary rounded-circle p-2 fs-6">3</span>
+                      <div>
+                        <strong className="d-block text-dark small">Xác nhận "Cài đặt":</strong>
+                        <span className="text-secondary small mt-1 d-block">
+                          Nhấn <strong>"Cài đặt"</strong> trong hộp thoại xác nhận. Biểu tượng QuizMaster sẽ xuất hiện ngay ngoài màn hình điện thoại như một app thật!
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 3: iOS (iPhone / iPad Safari) */}
+                {activeTab === 'ios' && (
+                  <div>
+                    <p className="small text-secondary mb-3">
+                      Cài đặt ứng dụng trên iPhone / iPad bằng trình duyệt <strong>Safari</strong>:
+                    </p>
+
+                    <div className="d-flex align-items-start gap-3 mb-3 p-3 bg-light rounded-3">
+                      <span className="badge bg-primary rounded-circle p-2 fs-6">1</span>
+                      <div>
+                        <strong className="d-block text-dark small">Nhấn nút Chia Sẻ trên Safari:</strong>
+                        <span className="text-secondary small d-flex align-items-center gap-1 mt-1">
+                          Chạm vào biểu tượng Chia sẻ <FaShareSquare className="text-primary" /> ở thanh công cụ <strong>dưới cùng</strong> màn hình Safari.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="d-flex align-items-start gap-3 mb-3 p-3 bg-light rounded-3">
+                      <span className="badge bg-primary rounded-circle p-2 fs-6">2</span>
+                      <div>
+                        <strong className="d-block text-dark small">Chọn "Thêm vào MH chính":</strong>
+                        <span className="text-secondary small d-flex align-items-center gap-1 mt-1">
+                          Cuộn xuống dưới và chọn dòng có biểu tượng <FaPlusSquare className="text-primary" /> <strong>"Thêm vào MH chính"</strong> (Add to Home Screen).
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="d-flex align-items-start gap-3 p-3 bg-light rounded-3">
+                      <span className="badge bg-primary rounded-circle p-2 fs-6">3</span>
+                      <div>
+                        <strong className="d-block text-dark small">Nhấn "Thêm" (Add):</strong>
+                        <span className="text-secondary small mt-1 d-block">
+                          Nhấn nút <strong>"Thêm"</strong> ở góc trên bên phải màn hình. Xong! Ứng dụng QuizMaster sẽ nằm trên màn hình chính của bạn.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="modal-footer border-top py-2">
                 <button
                   type="button"
                   className="btn btn-primary-custom w-100 fw-bold"
-                  onClick={() => setShowIOSGuide(false)}
+                  onClick={() => setShowGuideModal(false)}
                 >
-                  Tôi Đã Hiểu
+                  <FaCheckCircle className="me-1" /> Tôi Đã Hiểu
                 </button>
               </div>
             </div>

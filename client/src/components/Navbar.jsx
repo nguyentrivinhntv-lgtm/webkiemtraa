@@ -251,7 +251,9 @@ function Navbar() {
                 className="mobile-nav-link border-0 bg-transparent text-start w-100 text-info fw-semibold"
                 onClick={() => {
                   closeMenu();
-                  window.dispatchEvent(new CustomEvent('open-pwa-install'));
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('open-pwa-install'));
+                  }, 120);
                 }}
               >
                 <FaMobileAlt className="me-2" /> 📲 Cài đặt App ra màn hình
