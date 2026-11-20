@@ -2,7 +2,31 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const quizService = require('../services/quizService');
+const { generateExplanation } = require('../services/aiService');
 const { optionalToken, verifyToken, requireRole } = require('../middleware/auth');
+
+// POST /api/quiz/ai-explain - Intelligent AI question explanation
+router.post('/ai-explain', async (req, res) => {
+  try {
+    const { question, options, correctAnswer, studentAnswer, unit } = req.body;
+    if (!question) {
+      return res.status(400).json({ error: 'Thiếu thông tin câu hỏi' });
+    }
+
+    const explanation = await generateExplanation({
+      question,
+      options,
+      correctAnswer: correctAnswer !== undefined ? parseInt(correctAnswer) : 0,
+      studentAnswer: studentAnswer !== undefined ? parseInt(studentAnswer) : -1,
+      unit: unit || ''
+    });
+
+    res.json({ explanation });
+  } catch (err) {
+    console.error('Lỗi sinh lời giải thích AI:', err);
+    res.status(500).json({ error: 'Lỗi khi tạo lời giải thích: ' + err.message });
+  }
+});
 
 // GET /api/quiz/user/submissions - Get submission history of logged in student
 router.get('/user/submissions', verifyToken, async (req, res) => {

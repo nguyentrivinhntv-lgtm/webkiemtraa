@@ -58,6 +58,7 @@ export const getQuizAdmin = (id) => api.get(`/quiz/${id}/admin`);
 export const submitQuiz = (id, data) => api.post(`/quiz/${id}/submit`, data);
 export const deleteQuiz = (id) => api.delete(`/quiz/${id}`);
 export const getUserSubmissions = () => api.get('/quiz/user/submissions');
+export const getAiExplanationApi = (data) => api.post('/quiz/ai-explain', data);
 
 // Study APIs (Bookmarks, Progress, Spaced Repetition)
 export const getBookmarksApi = () => api.get('/study/bookmarks');

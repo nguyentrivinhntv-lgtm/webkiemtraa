@@ -3,12 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   FaArrowLeft, FaArrowRight, FaBookOpen, FaCheck, FaTimes,
   FaRedo, FaHome, FaRandom, FaEye, FaLightbulb, FaChartBar,
-  FaStar, FaRegStar, FaVolumeUp
+  FaStar, FaRegStar, FaVolumeUp, FaRobot, FaSpinner
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import {
   getQuizAdmin, getBookmarksApi, toggleBookmarkApi,
-  getQuizProgressApi, saveQuizProgressApi
+  getQuizProgressApi, saveQuizProgressApi, getAiExplanationApi
 } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -30,6 +30,28 @@ function ReviewPage() {
   const [bookmarkedSet, setBookmarkedSet] = useState(new Set())
   const [savedResumeInfo, setSavedResumeInfo] = useState(null)
   const [speechRate, setSpeechRate] = useState(1.0)
+  const [aiExplanations, setAiExplanations] = useState({})
+  const [aiLoading, setAiLoading] = useState(false)
+
+  const handleRequestAiExplain = async (qIndex, qData) => {
+    if (aiExplanations[qIndex]) return
+    setAiLoading(true)
+    try {
+      const res = await getAiExplanationApi({
+        question: qData.question,
+        options: qData.options,
+        correctAnswer: qData.correctAnswer,
+        studentAnswer: selectedAnswer !== null ? selectedAnswer : -1,
+        unit: qData.unit || ''
+      })
+      setAiExplanations(prev => ({ ...prev, [qIndex]: res.data.explanation }))
+      toast.success('✨ Đã sinh lời giải thích AI chi tiết!')
+    } catch (err) {
+      toast.error('Không thể tạo giải thích AI lúc này: ' + err.message)
+    } finally {
+      setAiLoading(false)
+    }
+  }
 
   useEffect(() => {
     loadQuiz()
@@ -533,6 +555,34 @@ function ReviewPage() {
                     </p>
                   </div>
                 )}
+
+                {/* AI Explanation Assistant Button & Card */}
+                <div className="mt-2 pt-2 border-top border-secondary border-opacity-25">
+                  {!aiExplanations[currentQIndex] ? (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-primary d-flex align-items-center gap-2 fw-semibold py-1 px-3"
+                      style={{ fontSize: '0.82rem', borderRadius: '20px' }}
+                      disabled={aiLoading}
+                      onClick={() => handleRequestAiExplain(currentQIndex, currentQ)}
+                    >
+                      {aiLoading ? (
+                        <><FaSpinner className="fa-spin" /> Đang phân tích ngữ pháp bằng AI...</>
+                      ) : (
+                        <><FaRobot className="text-primary" /> ✨ Trợ Lý AI Phân Tích & Giải Thích Chi Tiết</>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="p-3 rounded-3 bg-white border border-primary border-opacity-50 small mt-2 shadow-sm">
+                      <div className="d-flex align-items-center gap-2 mb-2 text-primary fw-bold">
+                        <FaRobot size={15} /> Phân Tích Chuyên Sâu Của Trợ Lý AI:
+                      </div>
+                      <div className="text-dark lh-base" style={{ whiteSpace: 'pre-line', fontSize: '0.88rem' }}>
+                        {aiExplanations[currentQIndex]}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

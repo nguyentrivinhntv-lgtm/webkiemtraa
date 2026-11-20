@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
   FaClock, FaCheckCircle, FaUser, FaArrowLeft, FaArrowRight,
   FaListOl, FaExclamationTriangle, FaEye, FaKeyboard,
-  FaShieldAlt, FaExpand, FaBan, FaTimes, FaChevronUp, FaChevronDown
+  FaShieldAlt, FaExpand, FaBan, FaTimes, FaChevronUp, FaChevronDown,
+  FaFlag, FaRedo, FaUndo
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { getQuiz, submitQuiz } from '../services/api'
@@ -12,6 +13,7 @@ import { useAuth } from '../contexts/AuthContext'
 function QuizPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { user } = useAuth()
 
   const [quiz, setQuiz] = useState(null)
@@ -27,8 +29,41 @@ function QuizPage() {
   const [currentQIndex, setCurrentQIndex] = useState(0)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [showDrawer, setShowDrawer] = useState(false)
-  const [drawerFilter, setDrawerFilter] = useState('all') // 'all' | 'unanswered'
+  const [drawerFilter, setDrawerFilter] = useState('all') // 'all' | 'unanswered' | 'flagged'
   const [passageExpanded, setPassageExpanded] = useState(true)
+
+  // Advanced Exam Toolkit: Flagging & Elimination
+  const [flaggedQuestions, setFlaggedQuestions] = useState(new Set())
+  const [eliminatedOptions, setEliminatedOptions] = useState({}) // { [qIdx]: Set([optIdx]) }
+  const [navFilter, setNavFilter] = useState('all') // 'all' | 'unanswered' | 'flagged'
+
+  const toggleFlag = (index) => {
+    setFlaggedQuestions(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return next
+    })
+  }
+
+  const toggleEliminate = (qIdx, optIdx, e) => {
+    if (e) e.stopPropagation()
+    setEliminatedOptions(prev => {
+      const currentSet = new Set(prev[qIdx] || [])
+      if (currentSet.has(optIdx)) {
+        currentSet.delete(optIdx)
+      } else {
+        currentSet.add(optIdx)
+      }
+      return {
+        ...prev,
+        [qIdx]: currentSet
+      }
+    })
+  }
 
   // 1-Warning Proctoring System: Warn students ONCE, auto-submit on 2nd violation
   const MAX_WARNINGS = 1
@@ -90,8 +125,23 @@ function QuizPage() {
   const loadQuiz = async () => {
     try {
       const res = await getQuiz(id)
-      setQuiz(res.data)
-      setTimeLeft(res.data.timeLimit * 60)
+      let quizData = res.data
+
+      // Check if this is a "Retake wrong questions" session
+      if (location.state?.retakeQuestions && location.state.retakeQuestions.length > 0) {
+        const retakeList = location.state.retakeQuestions
+        quizData = {
+          ...quizData,
+          title: `[Luyện lại câu sai] ${quizData.title}`,
+          questions: retakeList,
+          totalQuestions: retakeList.length,
+          type: 'multiple-choice'
+        }
+        toast.info(`🔄 Chế độ luyện lại: Đang làm lại ${retakeList.length} câu đã trả lời sai!`)
+      }
+
+      setQuiz(quizData)
+      setTimeLeft(quizData.timeLimit * 60)
     } catch (err) {
       toast.error('Không tìm thấy bài thi')
       navigate('/')
@@ -592,45 +642,122 @@ function QuizPage() {
             {/* Current Question */}
             {currentQ && (
               <div className="question-card shadow-sm border">
-                <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
-                  <div className="d-flex align-items-center">
+                <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom flex-wrap gap-2">
+                  <div className="d-flex align-items-center gap-2">
                     <span className="question-number">{currentQIndex + 1}</span>
                     <span className="badge bg-light text-secondary border">
                       {currentQ.unit || currentQ.section || `Câu ${currentQIndex + 1} / ${allQuestions.length}`}
                     </span>
                   </div>
-                  {answers[currentQIndex] !== undefined ? (
-                    <span className="badge bg-success bg-opacity-10 text-success border border-success">
-                      ✓ Đã chọn
-                    </span>
-                  ) : (
-                    <span className="badge bg-warning bg-opacity-10 text-warning border border-warning">
-                      Chưa làm
-                    </span>
-                  )}
+
+                  <div className="d-flex align-items-center gap-2">
+                    {/* Flag button */}
+                    <button
+                      type="button"
+                      className={`btn btn-sm d-flex align-items-center gap-1 ${
+                        flaggedQuestions.has(currentQIndex)
+                          ? 'btn-warning text-dark fw-bold border-warning'
+                          : 'btn-outline-secondary'
+                      }`}
+                      onClick={() => toggleFlag(currentQIndex)}
+                      title="Gắn cờ câu hỏi này để kiểm tra lại trước khi nộp bài"
+                      style={{ borderRadius: '20px', padding: '3px 10px', fontSize: '0.8rem' }}
+                    >
+                      <FaFlag size={11} className={flaggedQuestions.has(currentQIndex) ? 'text-danger' : ''} />
+                      <span>{flaggedQuestions.has(currentQIndex) ? 'Đã gắn cờ' : 'Gắn cờ'}</span>
+                    </button>
+
+                    {answers[currentQIndex] !== undefined ? (
+                      <span className="badge bg-success bg-opacity-10 text-success border border-success">
+                        ✓ Đã chọn
+                      </span>
+                    ) : (
+                      <span className="badge bg-warning bg-opacity-10 text-warning border border-warning">
+                        Chưa làm
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <h5 className="fw-bold mb-3 mb-md-4 text-dark lh-base">
                   {currentQ.question}
                 </h5>
 
-                {/* Option Buttons */}
-                <div className="options-list">
-                  {currentQ.options?.map((opt, optIndex) => {
-                    const isSelected = answers[currentQIndex] === optIndex
+                {/* Option Buttons: Specialized True/False or Standard Multiple-Choice with Elimination */}
+                {(() => {
+                  const opts = currentQ.options || []
+                  const isTrueFalse = opts.length === 2 && (
+                    (opts[0].text?.toLowerCase().includes('true') || opts[0].text?.toLowerCase().includes('đúng')) &&
+                    (opts[1].text?.toLowerCase().includes('false') || opts[1].text?.toLowerCase().includes('sai'))
+                  )
+
+                  if (isTrueFalse) {
                     return (
-                      <button
-                        key={optIndex}
-                        type="button"
-                        className={`option-btn ${isSelected ? 'selected' : ''}`}
-                        onClick={() => handleSelectOption(currentQIndex, optIndex)}
-                      >
-                        <span className="option-label">{opt.label}</span>
-                        <span className="flex-1">{opt.text}</span>
-                      </button>
+                      <div className="row g-3 my-2">
+                        {opts.map((opt, optIndex) => {
+                          const isSelected = answers[currentQIndex] === optIndex
+                          const isTrue = optIndex === 0
+                          return (
+                            <div key={optIndex} className="col-6">
+                              <button
+                                type="button"
+                                className={`w-100 p-3 p-md-4 rounded-4 border-2 fw-bold text-center transition-all ${
+                                  isSelected
+                                    ? (isTrue ? 'bg-success text-white border-success shadow' : 'bg-danger text-white border-danger shadow')
+                                    : 'bg-light text-dark border'
+                                }`}
+                                onClick={() => handleSelectOption(currentQIndex, optIndex)}
+                                style={{ minHeight: '90px', cursor: 'pointer' }}
+                              >
+                                <div className="fs-3 mb-1">{isTrue ? '✅' : '❌'}</div>
+                                <div className="fs-5">{opt.text}</div>
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
                     )
-                  })}
-                </div>
+                  }
+
+                  return (
+                    <div className="options-list">
+                      {opts.map((opt, optIndex) => {
+                        const isSelected = answers[currentQIndex] === optIndex
+                        const isEliminated = (eliminatedOptions[currentQIndex] || new Set()).has(optIndex)
+
+                        return (
+                          <div key={optIndex} className="d-flex align-items-center gap-2 mb-2">
+                            <button
+                              type="button"
+                              className={`option-btn flex-grow-1 ${isSelected ? 'selected' : ''}`}
+                              onClick={() => {
+                                if (isEliminated) {
+                                  toggleEliminate(currentQIndex, optIndex)
+                                }
+                                handleSelectOption(currentQIndex, optIndex)
+                              }}
+                              style={isEliminated ? { opacity: 0.4, textDecoration: 'line-through', filter: 'grayscale(0.8)' } : {}}
+                            >
+                              <span className="option-label">{opt.label}</span>
+                              <span className="flex-1">{opt.text}</span>
+                            </button>
+
+                            {/* Elimination Toggle Button */}
+                            <button
+                              type="button"
+                              className={`btn btn-sm ${isEliminated ? 'btn-secondary text-white' : 'btn-outline-secondary'} border-0`}
+                              onClick={(e) => toggleEliminate(currentQIndex, optIndex, e)}
+                              title={isEliminated ? 'Khôi phục phương án này' : 'Gạch bỏ loại suy phương án này'}
+                              style={{ width: '36px', height: '36px', borderRadius: '8px', flexShrink: 0 }}
+                            >
+                              {isEliminated ? '↩' : '✕'}
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
 
                 {/* Navigation Controls */}
                 <div className="d-flex justify-content-between align-items-center mt-3 mt-md-4 pt-3 border-top">
@@ -694,22 +821,61 @@ function QuizPage() {
                 </span>
               </div>
 
+              {/* Filter Tabs on Desktop Sidebar */}
+              <div className="d-flex gap-1 p-1 mb-3 bg-light rounded-2 border">
+                <button
+                  type="button"
+                  className={`btn btn-sm ${navFilter === 'all' ? 'btn-primary' : 'btn-light'} py-1 px-1 flex-grow-1`}
+                  style={{ fontSize: '0.75rem' }}
+                  onClick={() => setNavFilter('all')}
+                >
+                  Tất cả ({allQuestions.length})
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${navFilter === 'unanswered' ? 'btn-danger' : 'btn-light'} py-1 px-1 flex-grow-1`}
+                  style={{ fontSize: '0.75rem' }}
+                  onClick={() => setNavFilter('unanswered')}
+                >
+                  Chưa ({allQuestions.length - answeredCount})
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${navFilter === 'flagged' ? 'btn-warning text-dark fw-bold' : 'btn-light'} py-1 px-1 flex-grow-1`}
+                  style={{ fontSize: '0.75rem' }}
+                  onClick={() => setNavFilter('flagged')}
+                >
+                  🚩 Cờ ({flaggedQuestions.size})
+                </button>
+              </div>
+
               {/* Scrollable button grid */}
               <div className="question-nav mb-4" style={{ maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
                 {allQuestions.map((_, index) => {
                   const isAnswered = answers[index] !== undefined
                   const isCurrent = currentQIndex === index
+                  const isFlagged = flaggedQuestions.has(index)
+
+                  if (navFilter === 'unanswered' && isAnswered) return null
+                  if (navFilter === 'flagged' && !isFlagged) return null
+
                   return (
                     <button
                       key={index}
-                      className={`question-nav-btn ${isAnswered ? 'answered' : ''} ${isCurrent ? 'current' : ''}`}
+                      className={`question-nav-btn ${isAnswered ? 'answered' : ''} ${isCurrent ? 'current' : ''} ${isFlagged ? 'border border-warning border-2' : ''}`}
                       onClick={() => {
                         setCurrentQIndex(index)
                         window.scrollTo({ top: 0, behavior: 'smooth' })
                       }}
-                      title={`Câu ${index + 1}`}
+                      title={`Câu ${index + 1}${isFlagged ? ' (Đã gắn cờ)' : ''}`}
+                      style={{ position: 'relative' }}
                     >
                       {index + 1}
+                      {isFlagged && (
+                        <span style={{ position: 'absolute', top: '-4px', right: '-4px', fontSize: '10px' }}>
+                          🚩
+                        </span>
+                      )}
                     </button>
                   )
                 })}
@@ -820,7 +986,14 @@ function QuizPage() {
                 className={`btn btn-sm ${drawerFilter === 'unanswered' ? 'btn-danger' : 'btn-outline-secondary'} flex-1 fw-semibold`}
                 onClick={() => setDrawerFilter('unanswered')}
               >
-                Chưa làm ({allQuestions.length - answeredCount})
+                Chưa ({allQuestions.length - answeredCount})
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${drawerFilter === 'flagged' ? 'btn-warning text-dark fw-bold' : 'btn-outline-secondary'} flex-1 fw-semibold`}
+                onClick={() => setDrawerFilter('flagged')}
+              >
+                🚩 Cờ ({flaggedQuestions.size})
               </button>
             </div>
 
@@ -830,8 +1003,12 @@ function QuizPage() {
                 {allQuestions.map((_, index) => {
                   const isAnswered = answers[index] !== undefined
                   const isCurrent = currentQIndex === index
+                  const isFlagged = flaggedQuestions.has(index)
 
                   if (drawerFilter === 'unanswered' && isAnswered) {
+                    return null
+                  }
+                  if (drawerFilter === 'flagged' && !isFlagged) {
                     return null
                   }
 
@@ -839,14 +1016,20 @@ function QuizPage() {
                     <button
                       key={index}
                       type="button"
-                      className={`question-nav-btn ${isAnswered ? 'answered' : ''} ${isCurrent ? 'current' : ''}`}
+                      className={`question-nav-btn ${isAnswered ? 'answered' : ''} ${isCurrent ? 'current' : ''} ${isFlagged ? 'border border-warning border-2' : ''}`}
                       onClick={() => {
                         setCurrentQIndex(index)
                         setShowDrawer(false)
                         window.scrollTo({ top: 0, behavior: 'smooth' })
                       }}
+                      style={{ position: 'relative' }}
                     >
                       {index + 1}
+                      {isFlagged && (
+                        <span style={{ position: 'absolute', top: '-4px', right: '-4px', fontSize: '10px' }}>
+                          🚩
+                        </span>
+                      )}
                     </button>
                   )
                 })}

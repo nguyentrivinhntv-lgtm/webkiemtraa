@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   FaGraduationCap, FaHome, FaCog, FaBars, FaTimes,
   FaSun, FaMoon, FaUser, FaSignOutAlt, FaSignInAlt, FaUserCircle,
-  FaStar, FaMobileAlt
+  FaStar, FaMobileAlt, FaBell, FaCheckCircle
 } from 'react-icons/fa';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -14,9 +14,65 @@ function Navbar() {
   const { user, isLoggedIn, isTeacherOrAdmin, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [readNotifIds, setReadNotifIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('read_notif_ids') || '[]');
+    } catch {
+      return [];
+    }
+  });
+
+  const notifications = [
+    {
+      id: 'notif_spaced_rep',
+      type: 'study',
+      title: '🃏 Đến hạn ôn tập Flashcard (SM-2)',
+      message: 'Các câu hỏi khó đang chờ bạn lật thẻ hôm nay để củng cố trí nhớ dài hạn!',
+      link: '/bookmarks',
+      time: 'Hôm nay'
+    },
+    {
+      id: 'notif_speed_challenge',
+      type: 'challenge',
+      title: '⚡ Thử thách Tốc độ (Speed Quiz)',
+      message: 'Rèn luyện phản xạ 15s/câu để nhận gấp đôi điểm kinh nghiệm (XP)!',
+      link: '/leaderboard',
+      time: 'Mới'
+    },
+    {
+      id: 'notif_classroom',
+      type: 'classroom',
+      title: '🏫 Lớp học & Bài tập trực tuyến',
+      message: 'Tham gia lớp học và kiểm tra danh sách đề thi giáo viên giao.',
+      link: '/classroom',
+      time: 'Nhắc nhở'
+    }
+  ];
+
+  const unreadCount = notifications.filter(n => !readNotifIds.includes(n.id)).length;
+
+  const handleMarkAllRead = () => {
+    const allIds = notifications.map(n => n.id);
+    setReadNotifIds(allIds);
+    localStorage.setItem('read_notif_ids', JSON.stringify(allIds));
+  };
+
+  const handleNotifClick = (notif) => {
+    if (!readNotifIds.includes(notif.id)) {
+      const updated = [...readNotifIds, notif.id];
+      setReadNotifIds(updated);
+      localStorage.setItem('read_notif_ids', JSON.stringify(updated));
+    }
+    setShowNotifications(false);
+    navigate(notif.link);
+  };
 
   const toggleMenu = () => setIsOpen(prev => !prev);
-  const closeMenu = () => setIsOpen(false);
+  const closeMenu = () => {
+    setIsOpen(false);
+    setShowNotifications(false);
+  };
 
   const handleLogout = () => {
     logout();
@@ -106,6 +162,86 @@ function Navbar() {
               {isDark ? <FaSun className="text-warning" /> : <FaMoon />}
             </button>
 
+            {/* Notification Bell Button & Dropdown */}
+            <div className="position-relative">
+              <button
+                className="btn btn-outline-light btn-sm rounded-circle p-2 d-flex align-items-center justify-content-center position-relative"
+                style={{ width: 36, height: 36 }}
+                onClick={() => setShowNotifications(prev => !prev)}
+                title="Thông báo học tập"
+              >
+                <FaBell />
+                {unreadCount > 0 && (
+                  <span
+                    className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                    style={{ fontSize: '0.65rem' }}
+                  >
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Dropdown Panel */}
+              {showNotifications && (
+                <div
+                  className="notification-dropdown shadow-lg rounded-3 border"
+                  style={{
+                    position: 'absolute',
+                    top: '46px',
+                    right: 0,
+                    width: '320px',
+                    maxWidth: 'calc(100vw - 32px)',
+                    background: 'var(--bg-card, #ffffff)',
+                    zIndex: 2500,
+                    color: 'var(--text-primary, #0f172a)'
+                  }}
+                >
+                  <div className="p-3 border-bottom d-flex justify-content-between align-items-center bg-light rounded-top">
+                    <div className="fw-bold d-flex align-items-center gap-1 small text-dark">
+                      <FaBell className="text-primary" /> Thông Báo
+                      {unreadCount > 0 && <span className="badge bg-danger rounded-pill">{unreadCount}</span>}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        className="btn btn-link text-primary p-0 small text-decoration-none"
+                        style={{ fontSize: '0.75rem' }}
+                        onClick={handleMarkAllRead}
+                      >
+                        Đọc tất cả
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="p-2" style={{ maxHeight: '340px', overflowY: 'auto' }}>
+                    {notifications.map((notif) => {
+                      const isRead = readNotifIds.includes(notif.id);
+                      return (
+                        <div
+                          key={notif.id}
+                          className={`p-2 rounded-2 mb-2 transition-all ${isRead ? 'bg-light opacity-75' : 'bg-primary bg-opacity-10 border border-primary border-opacity-25'}`}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => handleNotifClick(notif)}
+                        >
+                          <div className="d-flex justify-content-between align-items-center mb-1">
+                            <span className="fw-bold small text-dark" style={{ fontSize: '0.82rem' }}>
+                              {notif.title}
+                            </span>
+                            <span className="badge bg-secondary bg-opacity-25 text-secondary" style={{ fontSize: '0.68rem' }}>
+                              {notif.time}
+                            </span>
+                          </div>
+                          <p className="small text-secondary mb-0" style={{ fontSize: '0.78rem', lineHeight: '1.4' }}>
+                            {notif.message}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* User Auth Info */}
             {isLoggedIn ? (
               <div className="d-flex align-items-center gap-2 ms-2">
@@ -143,7 +279,7 @@ function Navbar() {
             )}
           </div>
 
-          {/* Mobile Right Controls: Dark Mode + Hamburger */}
+          {/* Mobile Right Controls: Dark Mode + Notification + Hamburger */}
           <div className="d-flex d-md-none align-items-center gap-2">
             <button
               className="btn btn-outline-light btn-sm rounded-circle p-1 d-flex align-items-center justify-content-center"
@@ -151,6 +287,22 @@ function Navbar() {
               onClick={toggleTheme}
             >
               {isDark ? <FaSun className="text-warning" size={14} /> : <FaMoon size={14} />}
+            </button>
+
+            <button
+              className="btn btn-outline-light btn-sm rounded-circle p-1 d-flex align-items-center justify-content-center position-relative"
+              style={{ width: 32, height: 32 }}
+              onClick={() => setShowNotifications(prev => !prev)}
+            >
+              <FaBell size={14} />
+              {unreadCount > 0 && (
+                <span
+                  className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                  style={{ fontSize: '0.6rem', padding: '2px 4px' }}
+                >
+                  {unreadCount}
+                </span>
+              )}
             </button>
 
             {isLoggedIn ? (

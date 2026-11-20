@@ -1,14 +1,61 @@
 import { useState } from 'react'
-import { useLocation, Link } from 'react-router-dom'
+import { useLocation, useNavigate, Link } from 'react-router-dom'
 import {
   FaCheck, FaTimes, FaHome, FaTrophy, FaRedo, FaFilter,
-  FaCheckCircle, FaTimesCircle, FaClock, FaUser, FaMedal, FaFire, FaLightbulb
+  FaCheckCircle, FaTimesCircle, FaClock, FaUser, FaMedal, FaFire, FaLightbulb,
+  FaRobot, FaSpinner
 } from 'react-icons/fa'
+import { toast } from 'react-toastify'
+import { getAiExplanationApi } from '../services/api'
 
 function ResultPage() {
   const location = useLocation()
+  const navigate = useNavigate()
   const result = location.state?.result
   const [filter, setFilter] = useState('all') // 'all', 'wrong', 'correct'
+  const [aiExplanations, setAiExplanations] = useState({})
+  const [aiLoading, setAiLoading] = useState({})
+
+  const handleRequestAiExplain = async (idx, item) => {
+    if (aiExplanations[idx]) return
+    setAiLoading(prev => ({ ...prev, [idx]: true }))
+    try {
+      const res = await getAiExplanationApi({
+        question: item.question,
+        options: item.options,
+        correctAnswer: item.correctAnswer,
+        studentAnswer: item.studentAnswer
+      })
+      setAiExplanations(prev => ({ ...prev, [idx]: res.data.explanation }))
+      toast.success('✨ Đã sinh lời giải thích AI chi tiết!')
+    } catch (err) {
+      toast.error('Không thể tạo giải thích AI lúc này: ' + err.message)
+    } finally {
+      setAiLoading(prev => ({ ...prev, [idx]: false }))
+    }
+  }
+
+  const handleRetakeWrongQuestions = () => {
+    const wrongQs = (result.details || [])
+      .filter(d => !d.isCorrect)
+      .map((d, newIdx) => ({
+        id: newIdx + 1,
+        question: d.question,
+        options: d.options,
+        originalIndex: d.questionIndex,
+        explanation: d.explanation
+      }))
+
+    if (wrongQs.length === 0) {
+      toast.info('🎉 Bạn không làm sai câu nào! Xuất sắc!')
+      return
+    }
+
+    const quizTargetId = result.quizId || location.state?.quizId || ''
+    navigate(`/quiz/${quizTargetId}`, {
+      state: { retakeQuestions: wrongQs }
+    })
+  }
 
   if (!result) {
     return (
@@ -149,6 +196,15 @@ function ResultPage() {
         </div>
 
         <div className="d-flex flex-wrap justify-content-center gap-3">
+          {result.wrongCount > 0 && (
+            <button
+              type="button"
+              className="btn btn-warning text-dark fw-bold d-flex align-items-center gap-2 px-4 py-2 shadow-sm border border-warning"
+              onClick={handleRetakeWrongQuestions}
+            >
+              <FaRedo /> Luyện Lại {result.wrongCount} Câu Sai
+            </button>
+          )}
           <Link to="/" className="btn btn-outline-secondary d-flex align-items-center gap-2 px-4 py-2">
             <FaHome /> Về trang chủ
           </Link>
@@ -261,6 +317,34 @@ function ResultPage() {
                     <span style={{ whiteSpace: 'pre-line' }}>{item.explanation}</span>
                   </div>
                 )}
+
+                {/* AI Assistant Explanation Button & Display */}
+                <div className="mt-2 ms-md-5">
+                  {!aiExplanations[idx] ? (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-info d-flex align-items-center gap-1 fw-semibold py-1 px-3"
+                      style={{ fontSize: '0.8rem', borderRadius: '16px' }}
+                      disabled={aiLoading[idx]}
+                      onClick={() => handleRequestAiExplain(idx, item)}
+                    >
+                      {aiLoading[idx] ? (
+                        <><FaSpinner className="fa-spin" /> Đang phân tích AI...</>
+                      ) : (
+                        <><FaRobot className="text-info" /> ✨ Trợ lý AI Phân Tích Câu Này</>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="p-3 rounded-3 bg-light border border-info border-opacity-50 small mt-2">
+                      <div className="d-flex align-items-center gap-2 mb-2 text-info fw-bold">
+                        <FaRobot size={15} /> Phân Tích & Hướng Dẫn Chi Tiết Của AI:
+                      </div>
+                      <div className="text-dark lh-base" style={{ whiteSpace: 'pre-line', fontSize: '0.88rem' }}>
+                        {aiExplanations[idx]}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             ))
           )}
