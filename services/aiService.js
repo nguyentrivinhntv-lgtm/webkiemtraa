@@ -1,63 +1,111 @@
 /**
  * AI Explanation Service for QuizMaster
  * Supports:
- *  1. Groq Cloud API (Llama 3.1 8B / Llama 3 70B / Mixtral - Super fast & free)
+ *  1. Groq Cloud API (Dynamically fetches active models: Llama 3.3 / Llama 3.1 / Mixtral)
  *  2. Google Gemini API (Gemini 1.5 Flash)
  *  3. Built-in Expert Pedagogical Rule Engine (Offline fallback)
  */
 
-const GROQ_MODELS = [
-  'llama-3.1-8b-instant',
-  'llama3-70b-8192',
-  'llama3-8b-8192',
-  'mixtral-8x7b-32768',
-  'gemma2-9b-it'
-];
+let cachedGroqModel = null;
+let lastModelCheckTime = 0;
 
-async function callGroq({ prompt, apiKey }) {
-  let lastError = null;
-
-  for (const model of GROQ_MODELS) {
-    try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey.trim()}`
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: 'system',
-              content: 'Bạn là trợ lý giáo viên tiếng Anh & khảo thí xuất sắc. Luôn trả lời bằng tiếng Việt một cách sư phạm, súc tích, dễ hiểu.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 600
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content?.trim();
-        if (content) return content;
-      } else {
-        const errData = await response.json().catch(() => ({}));
-        lastError = new Error(errData.error?.message || `Groq error with ${model}`);
-        // If model not found or unauthorized for this specific model, fallback to next
-        continue;
-      }
-    } catch (err) {
-      lastError = err;
-    }
+/**
+ * Dynamically queries Groq's /models endpoint to find the best active model
+ * so decommissioned models are never called.
+ */
+async function getAvailableGroqModel(apiKey) {
+  const now = Date.now();
+  if (cachedGroqModel && now - lastModelCheckTime < 15 * 60 * 1000) {
+    return cachedGroqModel;
   }
 
-  throw lastError || new Error('Không thể kết nối với mô hình Groq');
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey.trim()}`
+      }
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const list = (data.data || []).map(m => m.id).filter(id => {
+        const lower = (id || '').toLowerCase();
+        return (
+          !lower.includes('whisper') &&
+          !lower.includes('vision') &&
+          !lower.includes('guard') &&
+          !lower.includes('embed') &&
+          !lower.includes('distil')
+        );
+      });
+
+      // Priority list of Groq models from newest to older
+      const preference = [
+        'llama-3.3-70b-versatile',
+        'llama-3.1-8b-instant',
+        'llama3-70b-8192',
+        'llama3-8b-8192',
+        'llama-3.2-3b-preview',
+        'llama-3.2-1b-preview',
+        'mixtral-8x7b-32768'
+      ];
+
+      for (const pref of preference) {
+        if (list.includes(pref)) {
+          cachedGroqModel = pref;
+          lastModelCheckTime = now;
+          return pref;
+        }
+      }
+
+      if (list.length > 0) {
+        cachedGroqModel = list[0];
+        lastModelCheckTime = now;
+        return cachedGroqModel;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to query Groq models dynamically:', err.message);
+  }
+
+  // Fallback to the most universal Groq model
+  return 'llama-3.1-8b-instant';
+}
+
+async function callGroq({ prompt, apiKey }) {
+  const model = await getAvailableGroqModel(apiKey);
+
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey.trim()}`
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        {
+          role: 'system',
+          content: 'Bạn là trợ lý giáo viên tiếng Anh & khảo thí xuất sắc. Luôn trả lời bằng tiếng Việt một cách sư phạm, súc tích, dễ hiểu.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: 600
+    })
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `Lỗi Groq API (${response.status})`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content?.trim();
 }
 
 async function callGemini({ prompt, apiKey }) {
@@ -146,46 +194,46 @@ async function testApiKey(apiKey, provider = 'auto') {
   const isGroq = provider === 'groq' || (provider === 'auto' && key.startsWith('gsk_'));
 
   if (isGroq) {
-    let successfulModel = null;
-    let lastError = null;
-
-    for (const model of GROQ_MODELS) {
-      try {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${key}`
-          },
-          body: JSON.stringify({
-            model,
-            messages: [{ role: 'user', content: 'Trả lời đúng 1 chữ: OK' }],
-            max_tokens: 10
-          })
-        });
-
-        if (response.ok) {
-          successfulModel = model;
-          break;
-        } else {
-          const errData = await response.json().catch(() => ({}));
-          lastError = new Error(errData.error?.message || `Lỗi xác thực Groq API (Mã ${response.status})`);
-        }
-      } catch (err) {
-        lastError = err;
+    // 1. Validate key and fetch currently active models
+    const modelsRes = await fetch('https://api.groq.com/openai/v1/models', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${key}`
       }
+    });
+
+    if (!modelsRes.ok) {
+      const errData = await modelsRes.json().catch(() => ({}));
+      throw new Error(errData.error?.message || `Lỗi xác thực Groq API (Mã ${modelsRes.status})`);
     }
 
-    if (successfulModel) {
-      return {
-        success: true,
-        provider: 'groq',
-        model: `${successfulModel} (Groq Cloud)`,
-        message: `🎉 Kết nối Groq Cloud API thành công! Mô hình ${successfulModel} phản hồi siêu tốc.`
-      };
-    } else {
-      throw new Error(`Groq: ${lastError?.message || 'Không tìm thấy mô hình khả dụng với API Key này.'}`);
+    const modelToUse = await getAvailableGroqModel(key);
+
+    // 2. Test chat completion with the active model
+    const testRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model: modelToUse,
+        messages: [{ role: 'user', content: 'Trả lời đúng 1 chữ: OK' }],
+        max_tokens: 10
+      })
+    });
+
+    if (!testRes.ok) {
+      const errData = await testRes.json().catch(() => ({}));
+      throw new Error(errData.error?.message || `Lỗi thử nghiệm mô hình ${modelToUse}`);
     }
+
+    return {
+      success: true,
+      provider: 'groq',
+      model: `${modelToUse} (Groq Cloud)`,
+      message: `🎉 Kết nối Groq Cloud API thành công! Đang sử dụng mô hình hoạt động: ${modelToUse}.`
+    };
   } else {
     // Test as Gemini
     try {
