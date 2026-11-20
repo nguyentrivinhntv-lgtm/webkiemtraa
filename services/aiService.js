@@ -9,9 +9,8 @@
 const SAFE_GROQ_MODELS = [
   'llama-3.1-8b-instant',
   'llama-3.3-70b-versatile',
-  'llama3-70b-8192',
-  'llama3-8b-8192',
-  'mixtral-8x7b-32768'
+  'llama-3.2-3b-preview',
+  'llama-3.2-1b-preview'
 ];
 
 async function callGroq({ prompt, apiKey }) {
@@ -48,10 +47,14 @@ async function callGroq({ prompt, apiKey }) {
         if (content) return content;
       } else {
         const errData = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          throw new Error('Groq API Key không hợp lệ hoặc đã hết hạn.');
+        }
         lastError = new Error(errData.error?.message || `Lỗi Groq model ${model}`);
         continue;
       }
     } catch (err) {
+      if (err.message && err.message.includes('không hợp lệ')) throw err;
       lastError = err;
     }
   }
@@ -145,10 +148,56 @@ async function testApiKey(apiKey, provider = 'auto') {
   const isGroq = provider === 'groq' || (provider === 'auto' && key.startsWith('gsk_'));
 
   if (isGroq) {
+    let availableModels = [];
+
+    // 1. Probe Groq models endpoint to validate key quickly
+    try {
+      const modelsRes = await fetch('https://api.groq.com/openai/v1/models', {
+        headers: {
+          'Authorization': `Bearer ${key}`
+        }
+      });
+
+      if (!modelsRes.ok) {
+        const errData = await modelsRes.json().catch(() => ({}));
+        if (modelsRes.status === 401) {
+          throw new Error('API Key không chính xác hoặc đã bị vô hiệu hóa trên Groq Cloud.');
+        }
+        if (modelsRes.status === 429) {
+          throw new Error('Groq API Key đã vượt quá giới hạn lượt gọi (Rate Limit).');
+        }
+        throw new Error(errData.error?.message || `Lỗi Groq API (Mã ${modelsRes.status})`);
+      }
+
+      const mData = await modelsRes.json();
+      if (Array.isArray(mData.data)) {
+        availableModels = mData.data
+          .filter(m => m.active !== false &&
+            !m.id.includes('whisper') &&
+            !m.id.includes('tts') &&
+            !m.id.includes('guard') &&
+            !m.id.includes('orpheus') &&
+            !m.id.includes('embed')
+          )
+          .map(m => m.id);
+      }
+    } catch (err) {
+      if (err.message && (err.message.includes('API Key') || err.message.includes('Rate Limit'))) {
+        throw new Error(`Groq: ${err.message}`);
+      }
+    }
+
+    // Determine list of active models to test
+    const candidates = [
+      ...SAFE_GROQ_MODELS.filter(m => availableModels.length === 0 || availableModels.includes(m)),
+      ...availableModels.filter(m => m.startsWith('llama-3') || m.startsWith('llama'))
+    ];
+    const modelsToTry = Array.from(new Set(candidates.length > 0 ? candidates : SAFE_GROQ_MODELS));
+
     let lastError = null;
     let workingModel = null;
 
-    for (const model of SAFE_GROQ_MODELS) {
+    for (const model of modelsToTry) {
       try {
         const testRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
@@ -168,9 +217,19 @@ async function testApiKey(apiKey, provider = 'auto') {
           break;
         } else {
           const errData = await testRes.json().catch(() => ({}));
-          lastError = new Error(errData.error?.message || `Lỗi với model ${model}`);
+          const errMsg = errData.error?.message || `Lỗi với model ${model}`;
+          if (testRes.status === 401) {
+            throw new Error('API Key Groq không chính xác hoặc đã hết hạn.');
+          }
+          if (testRes.status === 429) {
+            throw new Error(`Groq: Vượt quá giới hạn lượt gọi (Rate Limit): ${errMsg}`);
+          }
+          lastError = new Error(errMsg);
         }
       } catch (err) {
+        if (err.message && (err.message.includes('API Key') || err.message.includes('Rate Limit'))) {
+          throw err;
+        }
         lastError = err;
       }
     }
