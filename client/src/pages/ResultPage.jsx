@@ -21,13 +21,20 @@ function ResultPage() {
     setAiLoading(prev => ({ ...prev, [idx]: true }))
     try {
       const res = await getAiExplanationApi({
+        quizId: result.quizId,
+        quizTitle: result.quizTitle || '',
+        questionIndex: item.questionIndex !== undefined ? item.questionIndex : idx,
         question: item.question,
         options: item.options,
         correctAnswer: item.correctAnswer,
         studentAnswer: item.studentAnswer
       })
       setAiExplanations(prev => ({ ...prev, [idx]: res.data.explanation }))
-      toast.success('✨ Đã sinh lời giải thích AI chi tiết!')
+      if (res.data.fromCache) {
+        toast.success('⚡ Đã tải lời giải thích (đã lưu sẵn trong CSDL)!')
+      } else {
+        toast.success('✨ Đã sinh lời giải thích AI và tự động lưu vào CSDL!')
+      }
     } catch (err) {
       toast.error('Không thể tạo giải thích AI lúc này: ' + err.message)
     } finally {

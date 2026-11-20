@@ -38,6 +38,9 @@ function ReviewPage() {
     setAiLoading(true)
     try {
       const res = await getAiExplanationApi({
+        quizId: id,
+        quizTitle: quiz?.title || '',
+        questionIndex: qIndex,
         question: qData.question,
         options: qData.options,
         correctAnswer: qData.correctAnswer,
@@ -45,7 +48,11 @@ function ReviewPage() {
         unit: qData.unit || ''
       })
       setAiExplanations(prev => ({ ...prev, [qIndex]: res.data.explanation }))
-      toast.success('✨ Đã sinh lời giải thích AI chi tiết!')
+      if (res.data.fromCache) {
+        toast.success('⚡ Đã tải lời giải thích (đã lưu sẵn trong CSDL)!')
+      } else {
+        toast.success('✨ Đã sinh lời giải thích AI và tự động lưu vào CSDL!')
+      }
     } catch (err) {
       toast.error('Không thể tạo giải thích AI lúc này: ' + err.message)
     } finally {

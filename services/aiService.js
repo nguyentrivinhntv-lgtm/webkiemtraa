@@ -125,6 +125,31 @@ async function fetchActiveGeminiModels(apiKey) {
 /**
  * Gọi Groq API để tạo lời giải thích (100% Tiếng Việt)
  */
+
+/**
+ * Làm sạch phản hồi AI: loại bỏ thẻ suy nghĩ <think> và các đoạn phân tích CoT tiếng Anh bị rò rỉ
+ */
+function cleanAiResponse(text) {
+  if (!text) return '';
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  // Nếu mô hình in ra phần suy nghĩ (Chain of Thought) trước câu trả lời thực tế
+  const firstHeader = cleaned.search(/(🎯|💡|1\.\s*🎯|1\.\s*\*\*Đáp án|\*\*🎯|\*\*Đáp án đúng)/);
+  if (firstHeader > 0) {
+    const preamble = cleaned.substring(0, firstHeader);
+    if (
+      preamble.includes('Topic:') ||
+      preamble.includes('Constraint:') ||
+      preamble.includes('Subject Category:') ||
+      preamble.includes('Concept:') ||
+      preamble.includes('Question:')
+    ) {
+      cleaned = cleaned.substring(firstHeader).trim();
+    }
+  }
+  return cleaned;
+}
+
 async function callGroq({ prompt, apiKey }) {
   const key = apiKey.trim();
   let dynamicModels = [];
@@ -155,7 +180,7 @@ async function callGroq({ prompt, apiKey }) {
           messages: [
             {
               role: 'system',
-              content: 'Bạn là chuyên gia giáo dục và khảo thí tiếng Anh xuất sắc. BẮT BUỘC TRẢ LỜI 100% BẰNG TIẾNG VIỆT. TUYỆT ĐỐI KHÔNG DÙNG TIẾNG ANH ĐỂ GIẢI THÍCH (chỉ giữ nguyên các từ tiếng Anh khi trích dẫn đề bài hoặc từ vựng cần phân tích). Giải thích chi tiết, sư phạm, chuẩn xác.'
+              content: 'Bạn là chuyên gia giáo dục và khảo thí xuất sắc đa môn học (Pháp luật, Khoa học, Xã hội, Ngoại ngữ, v.v.). BẮT BUỘC TRẢ LỜI 100% BẰNG TIẾNG VIỆT. CHỈ TRẢ LỜI TRỰC TIẾP LỜI GIẢI THÍCH THEO CẤU TRÚC 3 PHẦN. TUYỆT ĐỐI KHÔNG IN RA SUY NGHĨ NỘI TÂM (CHAIN OF THOUGHT), KHÔNG PHÂN TÍCH BẰNG TIẾNG ANH, KHÔNG GIẢI THÍCH NGOÀI LỀ. TUYỆT ĐỐI KHÔNG DÙNG TIẾNG ANH ĐỂ GIẢI THÍCH (chỉ giữ nguyên các từ tiếng Anh khi trích dẫn đề bài hoặc từ vựng cần phân tích). Giải thích chi tiết, sư phạm, chuẩn xác.'
             },
             {
               role: 'user',
@@ -170,7 +195,7 @@ async function callGroq({ prompt, apiKey }) {
       if (response.ok) {
         const data = await response.json();
         const content = data.choices?.[0]?.message?.content?.trim();
-        if (content) return content;
+        if (content) return cleanAiResponse(content);
       } else {
         const errData = await response.json().catch(() => ({}));
         const errMsg = errData.error?.message || '';
@@ -228,7 +253,7 @@ async function callGemini({ prompt, apiKey }) {
       if (response.ok) {
         const data = await response.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (text) return text;
+        if (text) return cleanAiResponse(text);
       } else {
         const errData = await response.json().catch(() => ({}));
         const errMsg = errData.error?.message || `Lỗi Gemini (${response.status})`;
@@ -254,26 +279,31 @@ async function generateExplanation({
   correctAnswer = 0,
   studentAnswer = -1,
   unit = '',
+  quizTitle = '',
   apiKey = '',
   provider = 'auto'
 }) {
   const key = (apiKey && apiKey.trim()) || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || '';
 
-  const prompt = `YÊU CẦU BẮT BUỘC: TOÀN BỘ BÀI GIẢI PHẢI ĐƯỢC VIẾT 100% BẰNG TIẾNG VIỆT. TUYỆT ĐỐI KHÔNG GIẢI THÍCH BẰNG TIẾNG ANH (ngoại trừ trích dẫn các từ vựng hoặc câu của đề bài).
+  const subject = quizTitle || unit || 'Kiến thức chuyên môn bài thi';
 
-Bạn là một giáo viên chuyên môn giỏi, tận tâm và giàu kinh nghiệm luyện thi. Hãy phân tích và giải thích cặn kẽ câu trắc nghiệm sau bằng tiếng Việt:
+  const prompt = `YÊU CẦU BẮT BUỘC:
+- TOÀN BỘ BÀI GIẢI PHẢI ĐƯỢC VIẾT 100% BẰNG TIẾNG VIỆT.
+- CHỈ TRẢ LỜI TRỰC TIẾP LỜI GIẢI THEO CẤU TRÚC 3 PHẦN (KHÔNG IN RA SUY NGHĨ NỘI TÂM / CHAIN OF THOUGHT, KHÔNG DỊCH TIẾNG ANH).
+
+Bạn là giáo viên chuyên môn giỏi, tận tâm và giàu kinh nghiệm luyện thi môn ${subject}. Hãy phân tích và giải thích cặn kẽ câu trắc nghiệm sau bằng tiếng Việt:
 
 ĐỀ BÀI:
 - Câu hỏi: ${question}
 - Các lựa chọn:
 ${options.map((opt, i) => `  ${opt.label || String.fromCharCode(65 + i)}. ${opt.text}`).join('\n')}
 - Đáp án chính xác: ${options[correctAnswer]?.label || String.fromCharCode(65 + correctAnswer)}. ${options[correctAnswer]?.text || ''}
-${studentAnswer !== -1 && studentAnswer !== correctAnswer ? `- Học sinh đã chọn: ${options[studentAnswer]?.label || String.fromCharCode(65 + studentAnswer)}. ${options[studentAnswer]?.text || ''} (Đáp án này chưa chính xác)\n` : ''}- Chủ điểm kiến thức: ${unit || 'Ngữ pháp & Từ vựng tiếng Anh tổng hợp'}
+${studentAnswer !== -1 && studentAnswer !== correctAnswer ? `- Học sinh đã chọn: ${options[studentAnswer]?.label || String.fromCharCode(65 + studentAnswer)}. ${options[studentAnswer]?.text || ''} (Đáp án này chưa chính xác)\n` : ''}- Môn thi / Chủ đề: ${subject}
 
-HÃY TRÌNH BÀY LỜI GIẢI THEO CẤU TRÚC 3 PHẦN BẰNG TIẾNG VIỆT:
-🎯 **Đáp án đúng:** [Ghi rõ chữ cái và nội dung đáp án + Dịch nghĩa câu hỏi sang tiếng Việt hoàn chỉnh]
-💡 **Phân tích chi tiết:** [Phân tích ngữ pháp/từ vựng chi tiết: Vì sao chọn đáp án này? Dấu hiệu nhận biết là gì? Vì sao các phương án còn lại là phương án nhiễu sai?]
-📌 **Mẹo ghi nhớ nhanh:** [Công thức hoặc quy tắc cốt lõi giúp học sinh ghi nhớ áp dụng nhanh cho các bài thi sau]`;
+HÃY TRÌNH BÀY LỜI GIẢI THEO CẤU TRÚC 3 PHẦN (100% TIẾNG VIỆT):
+🎯 **Đáp án đúng:** ${options[correctAnswer]?.label || 'A'}. ${options[correctAnswer]?.text || ''} [Kèm giải nghĩa câu hỏi ngắn gọn bằng tiếng Việt]
+💡 **Phân tích chi tiết:** [Phân tích kiến thức chuyên môn: Tại sao chọn đáp án này? Căn cứ vào quy định, bản chất hoặc lý thuyết nào? Vì sao các phương án khác chưa chính xác?]
+📌 **Mẹo ghi nhớ nhanh:** [Từ khóa cốt lõi hoặc quy tắc ngắn gọn giúp ghi nhớ nhanh]`;
 
   if (key) {
     const isGroq = provider === 'groq' || (provider === 'auto' && (key.startsWith('gsk_') || process.env.GROQ_API_KEY === key));
@@ -482,9 +512,12 @@ function generateRuleBasedExplanation({ question, options, correctAnswer, studen
   } else if (qLower.includes('preposition') || qLower.includes('interested') || qLower.includes('fond') || qLower.includes('good at') || qLower.includes('depend')) {
     analysis = `Câu kiểm tra cụm giới từ cố định (Collocation / Prepositional phrase). Giới từ đi kèm chính xác với ngữ cảnh câu là **${correctLabel} (${correctText})**.`;
     tip = `Học giới từ theo cụm: *interested in, good at, fond of, depend on, proud of*.`;
+  } else if (qLower.includes('luật') || qLower.includes('pháp luật') || qLower.includes('văn bản') || qLower.includes('quy định') || qLower.includes('cơ quan') || qLower.includes('nhà nước') || qLower.includes('thẩm quyền') || qLower.includes('bắt buộc') || qLower.includes('quy chuẩn') || qLower.includes('hành chính') || qLower.includes('hình sự') || qLower.includes('dân sự')) {
+    analysis = `Căn cứ theo lý luận và quy định của pháp luật hiện hành, phương án **${correctLabel} (${correctText})** phản ánh chính xác và đầy đủ nhất bản chất của nội dung được hỏi.`;
+    tip = `Ghi nhớ các đặc điểm cốt lõi của pháp luật: Tính quy phạm phổ biến (bắt buộc chung), do Nhà nước ban hành/bảo đảm và được áp dụng nhiều lần.`;
   } else {
-    analysis = `Xét theo ngữ cảnh câu và ngữ pháp tiếng Anh, phương án **${correctLabel} (${correctText})** là đáp án chính xác nhất, đảm bảo tính liên kết từ vựng và cấu trúc ngữ pháp chuẩn xác.`;
-    tip = `Đọc kỹ chủ ngữ và động từ chính trong câu để xác định thì và dạng từ (danh từ, động từ, tính từ) phù hợp.`;
+    analysis = `Xét theo kiến thức chuyên môn của câu hỏi, phương án **${correctLabel} (${correctText})** là đáp án chính xác và toàn diện nhất theo chuẩn kiến thức bài thi.`;
+    tip = `Đọc kỹ câu hỏi và các phương án gây nhiễu để chọn đáp án bao quát nhất.`;
   }
 
   let studentNote = '';

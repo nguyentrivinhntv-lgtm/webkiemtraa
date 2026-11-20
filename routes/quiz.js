@@ -3,28 +3,74 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const quizService = require('../services/quizService');
 const { generateExplanation, testGeminiApiKey } = require('../services/aiService');
+const { getCachedExplanation, saveCachedExplanation } = require('../services/explanationCache');
 const { optionalToken, verifyToken, requireRole } = require('../middleware/auth');
 
-// POST /api/quiz/ai-explain - Intelligent AI question explanation
+// POST /api/quiz/ai-explain - Intelligent AI question explanation with Auto Caching in Database
 router.post('/ai-explain', async (req, res) => {
   try {
-    const { question, options, correctAnswer, studentAnswer, unit, apiKey } = req.body;
+    const {
+      question,
+      options,
+      correctAnswer,
+      studentAnswer,
+      unit,
+      quizTitle,
+      quizId,
+      questionIndex,
+      apiKey
+    } = req.body;
     const clientKey = apiKey || req.headers['x-gemini-key'] || '';
 
     if (!question) {
       return res.status(400).json({ error: 'Thiếu thông tin câu hỏi' });
     }
 
+    const cAnswer = correctAnswer !== undefined ? parseInt(correctAnswer) : 0;
+    const sAnswer = studentAnswer !== undefined ? parseInt(studentAnswer) : -1;
+
+    // 1. Kiểm tra trong Cơ Sở Dữ Liệu xem câu hỏi này đã từng được AI giải thích chưa
+    const cached = await getCachedExplanation({
+      question,
+      correctAnswer: cAnswer,
+      quizId,
+      questionIndex
+    });
+
+    if (cached && cached.explanation && cached.explanation.trim()) {
+      return res.json({
+        explanation: cached.explanation,
+        fromCache: true,
+        source: cached.source || 'database'
+      });
+    }
+
+    // 2. Nếu chưa có, gọi AI để sinh lời giải thích chuyên sâu (100% Tiếng Việt)
     const explanation = await generateExplanation({
       question,
       options,
-      correctAnswer: correctAnswer !== undefined ? parseInt(correctAnswer) : 0,
-      studentAnswer: studentAnswer !== undefined ? parseInt(studentAnswer) : -1,
+      correctAnswer: cAnswer,
+      studentAnswer: sAnswer,
       unit: unit || '',
+      quizTitle: quizTitle || '',
       apiKey: clientKey
     });
 
-    res.json({ explanation });
+    // 3. Tự động lưu lời giải thích vào Cơ Sở Dữ Liệu (JSON + MongoDB + Quiz metadata)
+    if (explanation) {
+      await saveCachedExplanation({
+        question,
+        correctAnswer: cAnswer,
+        quizId,
+        questionIndex,
+        explanation
+      });
+    }
+
+    res.json({
+      explanation,
+      fromCache: false
+    });
   } catch (err) {
     console.error('Lỗi sinh lời giải thích AI:', err);
     res.status(500).json({ error: 'Lỗi khi tạo lời giải thích: ' + err.message });
