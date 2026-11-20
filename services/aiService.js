@@ -147,29 +147,95 @@ async function callGroq({ prompt, apiKey }) {
   throw lastError || new Error('Không thể kết nối với các mô hình Groq.');
 }
 
-async function callGemini({ prompt, apiKey }) {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 600
-        }
-      })
-    }
-  );
+// Standard Gemini candidate models
+const SAFE_GEMINI_MODELS = [
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-flash',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-exp',
+  'gemini-1.5-flash-8b',
+  'gemini-1.5-pro',
+  'gemini-pro'
+];
 
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error?.message || `Lỗi Gemini API (${response.status})`);
+/**
+ * Fetch available Gemini models that support generateContent
+ */
+async function fetchActiveGeminiModels(apiKey) {
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`);
+    if (res.status === 400 || res.status === 403) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err.error?.message || '';
+      if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
+        throw new Error('API Key Google Gemini không hợp lệ.');
+      }
+    }
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data.models)) return [];
+    return data.models
+      .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+      .map(m => m.name.replace(/^models\//, ''));
+  } catch (err) {
+    if (err.message && err.message.includes('API Key')) throw err;
+    return [];
+  }
+}
+
+async function callGemini({ prompt, apiKey }) {
+  const key = apiKey.trim();
+  let dynamicModels = [];
+  try {
+    dynamicModels = await fetchActiveGeminiModels(key);
+  } catch (err) {
+    if (err.message && err.message.includes('API Key')) throw err;
   }
 
-  const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  // Prioritize safe list matches first, then any other valid models
+  const candidates = [
+    ...SAFE_GEMINI_MODELS.filter(m => dynamicModels.length === 0 || dynamicModels.includes(m)),
+    ...dynamicModels.filter(m => !SAFE_GEMINI_MODELS.includes(m))
+  ];
+  const modelsToTry = candidates.length > 0 ? Array.from(new Set(candidates)) : SAFE_GEMINI_MODELS;
+
+  let lastError = null;
+
+  for (const model of modelsToTry) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 600
+            }
+          })
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (text) return text;
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        const errMsg = errData.error?.message || `Lỗi Gemini (${response.status})`;
+        if (errMsg.includes('not found') || errMsg.includes('not supported') || response.status === 404) {
+          continue;
+        }
+        lastError = new Error(errMsg);
+      }
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('Không thể kết nối với các mô hình Google Gemini.');
 }
 
 async function generateExplanation({
@@ -314,32 +380,67 @@ async function testApiKey(apiKey, provider = 'auto') {
     }
   } else {
     // Test as Gemini
+    let availableModels = [];
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: 'Trả lời đúng 1 chữ: OK' }] }],
-            generationConfig: { maxOutputTokens: 10 }
-          })
-        }
-      );
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error?.message || `Lỗi xác thực Gemini API (Mã ${response.status})`);
+      availableModels = await fetchActiveGeminiModels(key);
+    } catch (err) {
+      if (err.message && err.message.includes('API Key')) {
+        throw new Error(`Gemini: ${err.message}`);
       }
+    }
 
+    const candidates = [
+      ...SAFE_GEMINI_MODELS.filter(m => availableModels.length === 0 || availableModels.includes(m)),
+      ...availableModels.filter(m => !SAFE_GEMINI_MODELS.includes(m))
+    ];
+    const modelsToTry = candidates.length > 0 ? Array.from(new Set(candidates)) : SAFE_GEMINI_MODELS;
+
+    let workingModel = null;
+    let lastError = null;
+
+    for (const model of modelsToTry) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: 'Trả lời đúng 1 chữ: OK' }] }],
+              generationConfig: { maxOutputTokens: 10 }
+            })
+          }
+        );
+
+        if (response.ok) {
+          workingModel = model;
+          break;
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          const errMsg = errData.error?.message || `Mã ${response.status}`;
+          if (response.status === 400 && errMsg.includes('API_KEY_INVALID')) {
+            throw new Error('API Key Google Gemini không chính xác.');
+          }
+          if (errMsg.includes('not found') || errMsg.includes('not supported') || response.status === 404) {
+            continue;
+          }
+          lastError = new Error(errMsg);
+        }
+      } catch (err) {
+        if (err.message && err.message.includes('API Key')) throw err;
+        lastError = err;
+      }
+    }
+
+    if (workingModel) {
       return {
         success: true,
         provider: 'gemini',
-        model: 'Gemini 1.5 Flash',
-        message: '🎉 Kết nối Google Gemini thành công! API Key hoàn toàn hợp lệ.'
+        model: `${workingModel} (Google Gemini)`,
+        message: `🎉 Kết nối Google Gemini thành công! Mô hình ${workingModel} sẵn sàng hoạt động.`
       };
-    } catch (err) {
-      throw new Error(`Gemini: ${err.message}`);
+    } else {
+      throw new Error(`Gemini: ${lastError?.message || 'Không tìm thấy mô hình Gemini khả dụng cho API Key này.'}`);
     }
   }
 }
