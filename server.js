@@ -4,14 +4,36 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const { connectDB, getIsConnected } = require('./config/db');
+const { createRateLimiter } = require('./middleware/rateLimiter');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Trust proxy for Render / Cloudflare deployments
+app.set('trust proxy', 1);
 
 // Middleware - allow all CORS origins
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Rate limiters
+const generalApiLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 150 });
+const authLimiter = createRateLimiter({
+  windowMs: 5 * 60 * 1000,
+  max: 20,
+  message: 'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau 5 phút!'
+});
+const uploadLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 15,
+  message: 'Tải lên quá nhanh. Vui lòng đợi 1 phút trước khi thử lại!'
+});
+
+app.use('/api', generalApiLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/upload', uploadLimiter);
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

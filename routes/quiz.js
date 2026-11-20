@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const quizService = require('../services/quizService');
-const { optionalToken, verifyToken } = require('../middleware/auth');
+const { optionalToken, verifyToken, requireRole } = require('../middleware/auth');
 
 // GET /api/quiz/user/submissions - Get submission history of logged in student
 router.get('/user/submissions', verifyToken, async (req, res) => {
@@ -38,15 +38,29 @@ router.get('/:id', async (req, res) => {
     // Clone and sanitize correct answers for student view
     const sanitized = JSON.parse(JSON.stringify(quiz));
 
+    // Tag original indices before any shuffle to ensure 100% accurate grading
+    let globalIndex = 0;
     if (sanitized.questions) {
-      sanitized.questions.forEach(q => {
+      sanitized.questions.forEach((q, idx) => {
+        q.originalIndex = idx;
         delete q.correctAnswer;
+        if (q.options) {
+          q.options.forEach((opt, optIdx) => {
+            opt.originalOptionIndex = optIdx;
+          });
+        }
       });
     }
     if (sanitized.passages) {
       sanitized.passages.forEach(p => {
-        p.questions.forEach(q => {
+        p.questions.forEach((q) => {
+          q.originalIndex = globalIndex++;
           delete q.correctAnswer;
+          if (q.options) {
+            q.options.forEach((opt, optIdx) => {
+              opt.originalOptionIndex = optIdx;
+            });
+          }
         });
       });
     }
@@ -117,7 +131,14 @@ router.post('/:id/submit', optionalToken, async (req, res) => {
     const details = [];
 
     allQuestions.forEach((q, index) => {
-      const studentAnswer = answers[index] !== undefined ? answers[index] : -1;
+      // Check both answers[`orig_${index}`] (for shuffled questions) and answers[index] (fallback)
+      let studentAnswer = -1;
+      if (answers[`orig_${index}`] !== undefined) {
+        studentAnswer = answers[`orig_${index}`];
+      } else if (answers[index] !== undefined) {
+        studentAnswer = answers[index];
+      }
+      
       const isCorrect = studentAnswer === q.correctAnswer;
       if (isCorrect) correct++;
 
@@ -185,8 +206,8 @@ router.get('/:id/submissions', async (req, res) => {
   }
 });
 
-// DELETE /api/quiz/:id - Delete quiz
-router.delete('/:id', async (req, res) => {
+// DELETE /api/quiz/:id - Delete quiz (Protected: Teacher or Admin only)
+router.delete('/:id', verifyToken, requireRole('teacher', 'admin'), async (req, res) => {
   try {
     const success = await quizService.deleteQuiz(req.params.id);
 

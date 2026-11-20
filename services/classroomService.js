@@ -1,7 +1,7 @@
-const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { getIsConnected } = require('../config/db');
+const { safeReadJson, safeWriteJson } = require('../utils/jsonStorage');
 const Classroom = require('../models/Classroom');
 const Submission = require('../models/Submission');
 const quizService = require('./quizService');
@@ -9,19 +9,11 @@ const quizService = require('./quizService');
 const dataFile = path.join(__dirname, '..', 'data', 'classrooms.json');
 
 function loadLocalClassrooms() {
-  if (!fs.existsSync(dataFile)) {
-    fs.writeFileSync(dataFile, '[]', 'utf-8');
-    return [];
-  }
-  try {
-    return JSON.parse(fs.readFileSync(dataFile, 'utf-8'));
-  } catch {
-    return [];
-  }
+  return safeReadJson(dataFile, []);
 }
 
 function saveLocalClassrooms(data) {
-  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), 'utf-8');
+  safeWriteJson(dataFile, data);
 }
 
 /**

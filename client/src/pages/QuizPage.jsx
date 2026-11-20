@@ -110,13 +110,19 @@ function QuizPage() {
   }
 
   const allQuestions = getAllQuestions()
-  const answeredCount = Object.keys(answers).length
+  const answeredCount = allQuestions.filter((_, idx) => answers[idx] !== undefined).length
   const progressPercent = allQuestions.length > 0 ? Math.round((answeredCount / allQuestions.length) * 100) : 0
 
   const handleSelectOption = (questionIndex, optionIndex) => {
+    const currentQ = allQuestions[questionIndex]
+    const origQIdx = currentQ?.originalIndex !== undefined ? currentQ.originalIndex : questionIndex
+    const selectedOpt = currentQ?.options?.[optionIndex]
+    const origOptIdx = selectedOpt?.originalOptionIndex !== undefined ? selectedOpt.originalOptionIndex : optionIndex
+
     setAnswers(prev => ({
       ...prev,
-      [questionIndex]: optionIndex
+      [questionIndex]: optionIndex,
+      [`orig_${origQIdx}`]: origOptIdx
     }))
   }
 

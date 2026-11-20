@@ -1,27 +1,19 @@
-const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { getIsConnected } = require('../config/db');
+const { safeReadJson, safeWriteJson } = require('../utils/jsonStorage');
 const User = require('../models/User');
 
 const usersFile = path.join(__dirname, '..', 'data', 'users.json');
 
 // Helper for local JSON storage
 function loadLocalUsers() {
-  if (!fs.existsSync(usersFile)) {
-    fs.writeFileSync(usersFile, '[]', 'utf-8');
-    return [];
-  }
-  try {
-    return JSON.parse(fs.readFileSync(usersFile, 'utf-8'));
-  } catch {
-    return [];
-  }
+  return safeReadJson(usersFile, []);
 }
 
 function saveLocalUsers(users) {
-  fs.writeFileSync(usersFile, JSON.stringify(users, null, 2), 'utf-8');
+  safeWriteJson(usersFile, users);
 }
 
 /**

@@ -1,6 +1,6 @@
-const fs = require('fs');
 const path = require('path');
 const { getIsConnected } = require('../config/db');
+const { safeReadJson, safeWriteJson } = require('../utils/jsonStorage');
 const Quiz = require('../models/Quiz');
 const Submission = require('../models/Submission');
 
@@ -8,36 +8,20 @@ const dataFile = path.join(__dirname, '..', 'data', 'quizzes.json');
 
 // Helper for local JSON operations
 function loadLocalQuizzes() {
-  if (!fs.existsSync(dataFile)) {
-    fs.writeFileSync(dataFile, '[]', 'utf-8');
-    return [];
-  }
-  try {
-    return JSON.parse(fs.readFileSync(dataFile, 'utf-8'));
-  } catch {
-    return [];
-  }
+  return safeReadJson(dataFile, []);
 }
 
 function saveLocalQuizzes(data) {
-  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), 'utf-8');
+  safeWriteJson(dataFile, data);
 }
 
 // Submissions local file
 const subFile = path.join(__dirname, '..', 'data', 'submissions.json');
 function loadLocalSubmissions() {
-  if (!fs.existsSync(subFile)) {
-    fs.writeFileSync(subFile, '[]', 'utf-8');
-    return [];
-  }
-  try {
-    return JSON.parse(fs.readFileSync(subFile, 'utf-8'));
-  } catch {
-    return [];
-  }
+  return safeReadJson(subFile, []);
 }
 function saveLocalSubmissions(data) {
-  fs.writeFileSync(subFile, JSON.stringify(data, null, 2), 'utf-8');
+  safeWriteJson(subFile, data);
 }
 
 /**

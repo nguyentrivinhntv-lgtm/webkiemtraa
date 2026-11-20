@@ -1,7 +1,7 @@
-const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { getIsConnected } = require('../config/db');
+const { safeReadJson, safeWriteJson } = require('../utils/jsonStorage');
 const Bookmark = require('../models/Bookmark');
 const StudyProgress = require('../models/StudyProgress');
 const SpacedRepItem = require('../models/SpacedRepItem');
@@ -12,19 +12,11 @@ const progressFile = path.join(__dirname, '..', 'data', 'progress.json');
 const spacedRepFile = path.join(__dirname, '..', 'data', 'spaced_rep.json');
 
 function loadJSON(filePath) {
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, '[]', 'utf-8');
-    return [];
-  }
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-  } catch {
-    return [];
-  }
+  return safeReadJson(filePath, []);
 }
 
 function saveJSON(filePath, data) {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  safeWriteJson(filePath, data);
 }
 
 /* ============================================================
