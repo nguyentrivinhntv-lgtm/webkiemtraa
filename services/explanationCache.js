@@ -3,6 +3,52 @@ const path = require('path');
 const { safeReadJson, safeWriteJson } = require('../utils/jsonStorage');
 const { getIsConnected } = require('../config/db');
 
+/**
+ * Làm sạch phản hồi AI: loại bỏ thẻ suy nghĩ <think> và các đoạn phân tích CoT tiếng Anh bị rò rỉ
+ */
+function cleanAiResponse(text) {
+  if (!text) return '';
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  const lines = cleaned.split('\n');
+  const filteredLines = [];
+  let inPreamble = true;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (inPreamble) {
+      if (
+        trimmed.includes('🎯') &&
+        (trimmed.toLowerCase().includes('đáp án đúng') || trimmed.toLowerCase().includes('đáp án:')) &&
+        !trimmed.toLowerCase().includes('structure') &&
+        !trimmed.match(/^\d+\.\s*🎯/)
+      ) {
+        inPreamble = false;
+        filteredLines.push(trimmed.replace(/^\*\s*\*/, '').replace(/^\*\s*/, ''));
+      }
+      continue;
+    }
+
+    filteredLines.push(line);
+  }
+
+  let result = (filteredLines.length > 0 ? filteredLines.join('\n') : cleaned).trim();
+  result = result
+    .replace(/^\*\s*\*\s*🎯/gm, '🎯')
+    .replace(/^\*\s*\*\s*💡/gm, '💡')
+    .replace(/^\*\s*\*\s*📌/gm, '📌')
+    .replace(/^\*\s*🎯/gm, '🎯')
+    .replace(/^\*\s*💡/gm, '💡')
+    .replace(/^\*\s*📌/gm, '📌')
+    .replace(/\* \*(💡[^*]+)\*/g, '$1')
+    .replace(/\* \*(📌[^*]+)\*/g, '$1')
+    .replace(/\* \*(🎯[^*]+)\*/g, '$1');
+
+  return result || cleaned;
+}
+
 let AiExplanation = null;
 try {
   AiExplanation = require('../models/AiExplanation');
@@ -42,7 +88,7 @@ async function getCachedExplanation({ question, correctAnswer, quizId, questionI
     const localCache = safeReadJson(cacheFile, {});
     if (localCache[hash] && localCache[hash].explanation && localCache[hash].explanation.trim()) {
       return {
-        explanation: localCache[hash].explanation,
+        explanation: cleanAiResponse(localCache[hash].explanation),
         fromCache: true,
         source: 'local_cache'
       };
@@ -63,7 +109,7 @@ async function getCachedExplanation({ question, correctAnswer, quizId, questionI
             questionHash: hash,
             quizId: record.quizId || quizId || '',
             questionIndex: record.questionIndex !== undefined ? record.questionIndex : questionIndex,
-            explanation: record.explanation,
+            explanation: cleanAiResponse(record.explanation),
             updatedAt: record.updatedAt || new Date().toISOString()
           };
           safeWriteJson(cacheFile, localCache);
@@ -108,7 +154,7 @@ async function getCachedExplanation({ question, correctAnswer, quizId, questionI
               questionHash: hash,
               quizId,
               questionIndex,
-              explanation: q.explanation,
+              explanation: cleanAiResponse(q.explanation),
               updatedAt: new Date().toISOString()
             };
             safeWriteJson(cacheFile, localCache);

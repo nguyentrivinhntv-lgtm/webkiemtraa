@@ -3,7 +3,7 @@ import { useLocation, useNavigate, Link } from 'react-router-dom'
 import {
   FaCheck, FaTimes, FaHome, FaTrophy, FaRedo, FaFilter,
   FaCheckCircle, FaTimesCircle, FaClock, FaUser, FaMedal, FaFire, FaLightbulb,
-  FaRobot, FaSpinner
+  FaRobot, FaSpinner, FaVolumeUp
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { getAiExplanationApi } from '../services/api'
@@ -15,6 +15,52 @@ function ResultPage() {
   const [filter, setFilter] = useState('all') // 'all', 'wrong', 'correct'
   const [aiExplanations, setAiExplanations] = useState({})
   const [aiLoading, setAiLoading] = useState({})
+  const [speakingIdx, setSpeakingIdx] = useState(null)
+
+  const handleSpeakExplanation = (text, idx) => {
+    if (!window.speechSynthesis) {
+      toast.warning('Trình duyệt không hỗ trợ phát âm TTS.')
+      return
+    }
+
+    if (speakingIdx === idx) {
+      window.speechSynthesis.cancel()
+      setSpeakingIdx(null)
+      return
+    }
+
+    window.speechSynthesis.cancel()
+
+    const cleanText = (text || '')
+      .replace(/[#*`_~]/g, '')
+      .replace(/[🎯💡📌⚡✨🎉⚠️✓✗]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    if (!cleanText) return
+
+    const utterance = new SpeechSynthesisUtterance(cleanText)
+    const isVi = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđĐ]/.test(cleanText)
+    utterance.lang = isVi ? 'vi-VN' : 'en-US'
+    utterance.rate = 1.0
+
+    const voices = window.speechSynthesis.getVoices() || []
+    if (voices.length > 0) {
+      if (isVi) {
+        const viVoice = voices.find(v => (v.lang && v.lang.startsWith('vi')) || (v.name && v.name.toLowerCase().includes('vietnam')))
+        if (viVoice) utterance.voice = viVoice
+      } else {
+        const enVoice = voices.find(v => v.lang && v.lang.startsWith('en'))
+        if (enVoice) utterance.voice = enVoice
+      }
+    }
+
+    utterance.onstart = () => setSpeakingIdx(idx)
+    utterance.onend = () => setSpeakingIdx(null)
+    utterance.onerror = () => setSpeakingIdx(null)
+
+    window.speechSynthesis.speak(utterance)
+  }
 
   const handleRequestAiExplain = async (idx, item) => {
     if (aiExplanations[idx]) return
@@ -343,8 +389,19 @@ function ResultPage() {
                     </button>
                   ) : (
                     <div className="p-3 rounded-3 bg-light border border-info border-opacity-50 small mt-2">
-                      <div className="d-flex align-items-center gap-2 mb-2 text-info fw-bold">
-                        <FaRobot size={15} /> Phân Tích & Hướng Dẫn Chi Tiết Của AI:
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <div className="d-flex align-items-center gap-2 text-info fw-bold">
+                          <FaRobot size={15} /> Phân Tích & Hướng Dẫn Chi Tiết Của AI:
+                        </div>
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${speakingIdx === idx ? 'btn-info text-white' : 'btn-outline-info'} py-0 px-2 d-flex align-items-center gap-1`}
+                          style={{ fontSize: '0.75rem', borderRadius: '15px' }}
+                          onClick={() => handleSpeakExplanation(aiExplanations[idx], idx)}
+                          title="Nghe phát âm lời giải thích của AI"
+                        >
+                          <FaVolumeUp /> {speakingIdx === idx ? 'Dừng đọc' : 'Nghe đọc giải thích'}
+                        </button>
                       </div>
                       <div className="text-dark lh-base" style={{ whiteSpace: 'pre-line', fontSize: '0.88rem' }}>
                         {aiExplanations[idx]}

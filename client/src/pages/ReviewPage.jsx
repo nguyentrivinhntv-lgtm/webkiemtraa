@@ -32,6 +32,8 @@ function ReviewPage() {
   const [speechRate, setSpeechRate] = useState(1.0)
   const [aiExplanations, setAiExplanations] = useState({})
   const [aiLoading, setAiLoading] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [speakingType, setSpeakingType] = useState(null)
 
   const handleRequestAiExplain = async (qIndex, qData) => {
     if (aiExplanations[qIndex]) return
@@ -212,17 +214,94 @@ function ReviewPage() {
     }
   }
 
-  const handleSpeak = (text) => {
-    if (!window.speechSynthesis) return
+  const isVietnameseText = (str) => {
+    return /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđĐ]/.test(str || '')
+  }
+
+  const handleSpeakText = (rawText, type = 'general') => {
+    if (!window.speechSynthesis) {
+      toast.warning('Trình duyệt của bạn không hỗ trợ tính năng đọc phát âm.')
+      return
+    }
+
+    // Toggle off if currently speaking the same item
+    if (isSpeaking && speakingType === type) {
+      window.speechSynthesis.cancel()
+      setIsSpeaking(false)
+      setSpeakingType(null)
+      return
+    }
+
     window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'en-US'
-    utterance.rate = speechRate
+
+    // Clean text: strip markdown symbols and emojis
+    const cleanText = (rawText || '')
+      .replace(/[#*`_~]/g, '')
+      .replace(/[🎯💡📌⚡✨🎉⚠️✓✗]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    if (!cleanText) return
+
+    const utterance = new SpeechSynthesisUtterance(cleanText)
+    const isVi = isVietnameseText(cleanText)
+    utterance.lang = isVi ? 'vi-VN' : 'en-US'
+    utterance.rate = speechRate || 1.0
+
+    const voices = window.speechSynthesis.getVoices() || []
+    if (voices.length > 0) {
+      if (isVi) {
+        const viVoice = voices.find(v => (v.lang && v.lang.startsWith('vi')) || (v.name && v.name.toLowerCase().includes('vietnam')))
+        if (viVoice) utterance.voice = viVoice
+      } else {
+        const enVoice = voices.find(v => v.lang && v.lang.startsWith('en'))
+        if (enVoice) utterance.voice = enVoice
+      }
+    }
+
+    utterance.onstart = () => {
+      setIsSpeaking(true)
+      setSpeakingType(type)
+    }
+
+    utterance.onend = () => {
+      setIsSpeaking(false)
+      setSpeakingType(null)
+    }
+
+    utterance.onerror = () => {
+      setIsSpeaking(false)
+      setSpeakingType(null)
+    }
+
     window.speechSynthesis.speak(utterance)
+  }
+
+  // Đọc toàn bộ câu hỏi và các phương án A, B, C, D (kèm đáp án đúng nếu đã mở)
+  const handleSpeakQuestionAndOptions = (qData) => {
+    if (!qData) return
+    let fullText = `Câu hỏi: ${qData.question}. `
+    if (qData.options && qData.options.length > 0) {
+      fullText += 'Các lựa chọn: ' + qData.options.map(opt => `Lựa chọn ${opt.label || ''}: ${opt.text}. `).join(' ')
+    }
+    if (revealed && qData.correctAnswer !== undefined && qData.options[qData.correctAnswer]) {
+      const correctOpt = qData.options[qData.correctAnswer]
+      fullText += ` Đáp án đúng là: ${correctOpt.label}. ${correctOpt.text}.`
+    }
+    handleSpeakText(fullText, 'question')
+  }
+
+  const stopSpeaking = () => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+    }
+    setIsSpeaking(false)
+    setSpeakingType(null)
   }
 
   const handleNext = () => {
     if (currentQIndex < allQuestions.length - 1) {
+      stopSpeaking()
       setCurrentQIndex(prev => prev + 1)
       setSelectedAnswer(null)
       setRevealed(false)
@@ -231,6 +310,7 @@ function ReviewPage() {
 
   const handlePrev = () => {
     if (currentQIndex > 0) {
+      stopSpeaking()
       setCurrentQIndex(prev => prev - 1)
       setSelectedAnswer(null)
       setRevealed(false)
@@ -238,6 +318,7 @@ function ReviewPage() {
   }
 
   const handleJump = (index) => {
+    stopSpeaking()
     setCurrentQIndex(index)
     setSelectedAnswer(null)
     setRevealed(false)
@@ -466,12 +547,12 @@ function ReviewPage() {
 
                 <button
                   type="button"
-                  className="btn btn-sm btn-light border rounded-circle"
-                  style={{ width: 32, height: 32 }}
-                  onClick={() => handleSpeak(currentQ.question)}
-                  title={`Nghe phát âm tiếng Anh (${speechRate}x)`}
+                  className={`btn btn-sm ${isSpeaking && speakingType === 'question' ? 'btn-primary text-white shadow-sm' : 'btn-light border'} rounded-circle`}
+                  style={{ width: 34, height: 34 }}
+                  onClick={() => handleSpeakQuestionAndOptions(currentQ)}
+                  title={isSpeaking && speakingType === 'question' ? 'Dừng đọc' : `Đọc to câu hỏi & các phương án (${speechRate}x)`}
                 >
-                  <FaVolumeUp className="text-secondary" />
+                  <FaVolumeUp className={isSpeaking && speakingType === 'question' ? 'text-white' : 'text-primary'} />
                 </button>
 
                 <button
@@ -554,9 +635,20 @@ function ReviewPage() {
 
                 {currentQ.explanation && (
                   <div className="mt-2 pt-2 border-top border-secondary border-opacity-25">
-                    <strong className="d-flex align-items-center gap-1 text-primary small mb-1">
-                      <FaLightbulb /> Giải thích & Mẹo ngữ pháp:
-                    </strong>
+                    <div className="d-flex align-items-center justify-content-between mb-1">
+                      <strong className="d-flex align-items-center gap-1 text-primary small">
+                        <FaLightbulb /> Giải thích & Mẹo kiến thức:
+                      </strong>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${isSpeaking && speakingType === 'base_explain' ? 'btn-primary text-white' : 'btn-outline-primary'} py-0 px-2 d-flex align-items-center gap-1`}
+                        style={{ fontSize: '0.75rem', borderRadius: '15px' }}
+                        onClick={() => handleSpeakText(currentQ.explanation, 'base_explain')}
+                        title="Nghe phát âm lời giải thích"
+                      >
+                        <FaVolumeUp /> {isSpeaking && speakingType === 'base_explain' ? 'Dừng đọc' : 'Nghe đọc giải thích'}
+                      </button>
+                    </div>
                     <p className="mb-0 text-dark small" style={{ whiteSpace: 'pre-line' }}>
                       {currentQ.explanation}
                     </p>
@@ -574,15 +666,26 @@ function ReviewPage() {
                       onClick={() => handleRequestAiExplain(currentQIndex, currentQ)}
                     >
                       {aiLoading ? (
-                        <><FaSpinner className="fa-spin" /> Đang phân tích ngữ pháp bằng AI...</>
+                        <><FaSpinner className="fa-spin" /> Đang phân tích kiến thức bằng AI...</>
                       ) : (
                         <><FaRobot className="text-primary" /> ✨ Trợ Lý AI Phân Tích & Giải Thích Chi Tiết</>
                       )}
                     </button>
                   ) : (
                     <div className="p-3 rounded-3 bg-white border border-primary border-opacity-50 small mt-2 shadow-sm">
-                      <div className="d-flex align-items-center gap-2 mb-2 text-primary fw-bold">
-                        <FaRobot size={15} /> Phân Tích Chuyên Sâu Của Trợ Lý AI:
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <div className="d-flex align-items-center gap-2 text-primary fw-bold">
+                          <FaRobot size={15} /> Phân Tích Chuyên Sâu Của Trợ Lý AI:
+                        </div>
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${isSpeaking && speakingType === 'ai_explain' ? 'btn-primary text-white' : 'btn-outline-primary'} py-0 px-2 d-flex align-items-center gap-1`}
+                          style={{ fontSize: '0.75rem', borderRadius: '15px' }}
+                          onClick={() => handleSpeakText(aiExplanations[currentQIndex], 'ai_explain')}
+                          title="Nghe phát âm lời giải thích của AI"
+                        >
+                          <FaVolumeUp /> {isSpeaking && speakingType === 'ai_explain' ? 'Dừng đọc' : 'Nghe đọc giải thích'}
+                        </button>
                       </div>
                       <div className="text-dark lh-base" style={{ whiteSpace: 'pre-line', fontSize: '0.88rem' }}>
                         {aiExplanations[currentQIndex]}

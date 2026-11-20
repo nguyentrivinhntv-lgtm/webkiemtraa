@@ -1,153 +1,47 @@
 /**
- * AI Explanation Service for QuizMaster
- * Supports:
- *  1. Groq Cloud API (Llama 3.1 8B / Llama 3.3 70B - Siêu tốc & miễn phí)
- *  2. Google Gemini API (Gemini 1.5 Flash / 2.0 Flash)
- *  3. Built-in Expert Pedagogical Rule Engine (Hệ thống phân tích tiếng Việt ngoại tuyến)
- */
-
-// Danh sách các mô hình Groq chính thức còn đang hoạt động
-const SAFE_GROQ_MODELS = [
-  'llama-3.1-8b-instant',
-  'llama-3.3-70b-versatile'
-];
-
-// Danh sách đen các model đã bị Groq khai tử (decommissioned)
-const DECOMMISSIONED_GROQ_MODELS = [
-  'llama-3.2-1b-preview',
-  'llama-3.2-3b-preview',
-  'llama-3.2-11b-vision-preview',
-  'llama-3.2-90b-vision-preview',
-  'llama-3.2-11b-text-preview',
-  'llama-3.2-90b-text-preview',
-  'llama3-8b-8192',
-  'llama3-70b-8192',
-  'mixtral-8x7b-32768',
-  'gemma-7b-it',
-  'gemma2-9b-it'
-];
-
-// Danh sách các model Google Gemini phổ biến
-const SAFE_GEMINI_MODELS = [
-  'gemini-1.5-flash-latest',
-  'gemini-1.5-flash',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-exp',
-  'gemini-1.5-flash-8b',
-  'gemini-1.5-pro',
-  'gemini-pro'
-];
-
-/**
- * Chuyển đổi toàn bộ thông báo lỗi tiếng Anh từ Groq / Gemini sang Tiếng Việt
- */
-function translateAiError(msg) {
-  if (!msg) return 'Không thể kết nối đến máy chủ AI.';
-  const lower = String(msg).toLowerCase();
-
-  if (lower.includes('decommissioned') || lower.includes('no longer supported')) {
-    return 'Mô hình này đã bị nhà cung cấp ngừng cung cấp (decommissioned).';
-  }
-  if (lower.includes('does not exist') || lower.includes('not found') || lower.includes('not supported') || lower.includes('not available')) {
-    return 'Mô hình không tồn tại hoặc tài khoản của bạn chưa được cấp quyền sử dụng.';
-  }
-  if (lower.includes('terms acceptance') || lower.includes('accept the terms')) {
-    return 'Tài khoản cần chấp thuận điều khoản dịch vụ (Terms of Service) trên trang quản trị Groq Console.';
-  }
-  if (lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('quota') || lower.includes('resource_exhausted')) {
-    return 'Đã vượt quá giới hạn lượt gọi hoặc dung lượng miễn phí (Rate Limit).';
-  }
-  if (lower.includes('invalid api key') || lower.includes('api_key_invalid') || lower.includes('unauthorized') || lower.includes('401')) {
-    return 'Mã API Key không hợp lệ hoặc đã bị vô hiệu hóa.';
-  }
-  if (lower.includes('organization restricted') || lower.includes('access denied') || lower.includes('permission denied') || lower.includes('403')) {
-    return 'Quyền truy cập bị từ chối bởi tổ chức hoặc tài khoản của bạn.';
-  }
-
-  return msg;
-}
-
-/**
- * Lấy danh sách mô hình chat đang hoạt động từ Groq
- */
-async function fetchActiveGroqModels(apiKey) {
-  try {
-    const res = await fetch('https://api.groq.com/openai/v1/models', {
-      headers: { 'Authorization': `Bearer ${apiKey}` }
-    });
-    if (res.status === 401) {
-      throw new Error('API Key Groq không chính xác hoặc đã bị vô hiệu hóa.');
-    }
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (!Array.isArray(data.data)) return [];
-    const skip = ['whisper', 'tts', 'guard', 'orpheus', 'embed', 'vision', 'scout'];
-    return data.data
-      .filter(m => {
-        const id = m.id || '';
-        if (m.active === false) return false;
-        if (DECOMMISSIONED_GROQ_MODELS.includes(id)) return false;
-        if (skip.some(s => id.includes(s))) return false;
-        return true;
-      })
-      .map(m => m.id);
-  } catch (err) {
-    if (err.message && err.message.includes('API Key')) throw err;
-    return [];
-  }
-}
-
-/**
- * Lấy danh sách mô hình Google Gemini khả dụng
- */
-async function fetchActiveGeminiModels(apiKey) {
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`);
-    if (res.status === 400 || res.status === 403) {
-      const err = await res.json().catch(() => ({}));
-      const msg = err.error?.message || '';
-      if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
-        throw new Error('API Key Google Gemini không hợp lệ.');
-      }
-    }
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (!Array.isArray(data.models)) return [];
-    return data.models
-      .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
-      .map(m => m.name.replace(/^models\//, ''));
-  } catch (err) {
-    if (err.message && err.message.includes('API Key')) throw err;
-    return [];
-  }
-}
-
-/**
- * Gọi Groq API để tạo lời giải thích (100% Tiếng Việt)
- */
-
-/**
  * Làm sạch phản hồi AI: loại bỏ thẻ suy nghĩ <think> và các đoạn phân tích CoT tiếng Anh bị rò rỉ
  */
 function cleanAiResponse(text) {
   if (!text) return '';
   let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
-  // Nếu mô hình in ra phần suy nghĩ (Chain of Thought) trước câu trả lời thực tế
-  const firstHeader = cleaned.search(/(🎯|💡|1\.\s*🎯|1\.\s*\*\*Đáp án|\*\*🎯|\*\*Đáp án đúng)/);
-  if (firstHeader > 0) {
-    const preamble = cleaned.substring(0, firstHeader);
-    if (
-      preamble.includes('Topic:') ||
-      preamble.includes('Constraint:') ||
-      preamble.includes('Subject Category:') ||
-      preamble.includes('Concept:') ||
-      preamble.includes('Question:')
-    ) {
-      cleaned = cleaned.substring(firstHeader).trim();
+  const lines = cleaned.split('\n');
+  const filteredLines = [];
+  let inPreamble = true;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (inPreamble) {
+      if (
+        trimmed.includes('🎯') &&
+        (trimmed.toLowerCase().includes('đáp án đúng') || trimmed.toLowerCase().includes('đáp án:')) &&
+        !trimmed.toLowerCase().includes('structure') &&
+        !trimmed.match(/^\d+\.\s*🎯/)
+      ) {
+        inPreamble = false;
+        filteredLines.push(trimmed.replace(/^\*\s*\*/, '').replace(/^\*\s*/, ''));
+      }
+      continue;
     }
+
+    filteredLines.push(line);
   }
-  return cleaned;
+
+  let result = (filteredLines.length > 0 ? filteredLines.join('\n') : cleaned).trim();
+  result = result
+    .replace(/^\*\s*\*\s*🎯/gm, '🎯')
+    .replace(/^\*\s*\*\s*💡/gm, '💡')
+    .replace(/^\*\s*\*\s*📌/gm, '📌')
+    .replace(/^\*\s*🎯/gm, '🎯')
+    .replace(/^\*\s*💡/gm, '💡')
+    .replace(/^\*\s*📌/gm, '📌')
+    .replace(/\* \*(💡[^*]+)\*/g, '$1')
+    .replace(/\* \*(📌[^*]+)\*/g, '$1')
+    .replace(/\* \*(🎯[^*]+)\*/g, '$1');
+
+  return result || cleaned;
 }
 
 async function callGroq({ prompt, apiKey }) {
