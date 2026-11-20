@@ -1,18 +1,18 @@
 /**
  * AI Explanation Service for QuizMaster
  * Supports:
- *  1. Groq Cloud API (Llama 3.1 8B / Llama 3.3 / Llama 3 70B - Super fast & free)
- *  2. Google Gemini API (Gemini 1.5 Flash)
- *  3. Built-in Expert Pedagogical Rule Engine (Offline fallback)
+ *  1. Groq Cloud API (Llama 3.1 8B / Llama 3.3 70B - Siêu tốc & miễn phí)
+ *  2. Google Gemini API (Gemini 1.5 Flash / 2.0 Flash)
+ *  3. Built-in Expert Pedagogical Rule Engine (Hệ thống phân tích tiếng Việt ngoại tuyến)
  */
 
-// Only keep universally-available, active production models
+// Danh sách các mô hình Groq chính thức còn đang hoạt động
 const SAFE_GROQ_MODELS = [
   'llama-3.1-8b-instant',
   'llama-3.3-70b-versatile'
 ];
 
-// Explicit blacklist of models decommissioned by Groq to prevent fallback loops
+// Danh sách đen các model đã bị Groq khai tử (decommissioned)
 const DECOMMISSIONED_GROQ_MODELS = [
   'llama-3.2-1b-preview',
   'llama-3.2-3b-preview',
@@ -27,9 +27,48 @@ const DECOMMISSIONED_GROQ_MODELS = [
   'gemma2-9b-it'
 ];
 
+// Danh sách các model Google Gemini phổ biến
+const SAFE_GEMINI_MODELS = [
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-flash',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-exp',
+  'gemini-1.5-flash-8b',
+  'gemini-1.5-pro',
+  'gemini-pro'
+];
+
 /**
- * Fetch the list of active text/chat models from Groq /v1/models.
- * Returns an array of model-id strings, or [] on failure.
+ * Chuyển đổi toàn bộ thông báo lỗi tiếng Anh từ Groq / Gemini sang Tiếng Việt
+ */
+function translateAiError(msg) {
+  if (!msg) return 'Không thể kết nối đến máy chủ AI.';
+  const lower = String(msg).toLowerCase();
+
+  if (lower.includes('decommissioned') || lower.includes('no longer supported')) {
+    return 'Mô hình này đã bị nhà cung cấp ngừng cung cấp (decommissioned).';
+  }
+  if (lower.includes('does not exist') || lower.includes('not found') || lower.includes('not supported') || lower.includes('not available')) {
+    return 'Mô hình không tồn tại hoặc tài khoản của bạn chưa được cấp quyền sử dụng.';
+  }
+  if (lower.includes('terms acceptance') || lower.includes('accept the terms')) {
+    return 'Tài khoản cần chấp thuận điều khoản dịch vụ (Terms of Service) trên trang quản trị Groq Console.';
+  }
+  if (lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('quota') || lower.includes('resource_exhausted')) {
+    return 'Đã vượt quá giới hạn lượt gọi hoặc dung lượng miễn phí (Rate Limit).';
+  }
+  if (lower.includes('invalid api key') || lower.includes('api_key_invalid') || lower.includes('unauthorized') || lower.includes('401')) {
+    return 'Mã API Key không hợp lệ hoặc đã bị vô hiệu hóa.';
+  }
+  if (lower.includes('organization restricted') || lower.includes('access denied') || lower.includes('permission denied') || lower.includes('403')) {
+    return 'Quyền truy cập bị từ chối bởi tổ chức hoặc tài khoản của bạn.';
+  }
+
+  return msg;
+}
+
+/**
+ * Lấy danh sách mô hình chat đang hoạt động từ Groq
  */
 async function fetchActiveGroqModels(apiKey) {
   try {
@@ -42,7 +81,6 @@ async function fetchActiveGroqModels(apiKey) {
     if (!res.ok) return [];
     const data = await res.json();
     if (!Array.isArray(data.data)) return [];
-    // Keep only text/chat models, skip audio/vision/guard/embed/tool-use-only
     const skip = ['whisper', 'tts', 'guard', 'orpheus', 'embed', 'vision', 'scout'];
     return data.data
       .filter(m => {
@@ -60,106 +98,7 @@ async function fetchActiveGroqModels(apiKey) {
 }
 
 /**
- * Check if an error message indicates the model is decommissioned / doesn't exist.
- */
-function isModelUnavailableError(msg) {
-  if (!msg) return false;
-  const lower = msg.toLowerCase();
-  return lower.includes('decommissioned') ||
-    lower.includes('does not exist') ||
-    lower.includes('not found') ||
-    lower.includes('no longer supported') ||
-    lower.includes('not available');
-}
-
-async function callGroq({ prompt, apiKey }) {
-  const key = apiKey.trim();
-  let lastError = null;
-
-  // Build ordered candidate list: safe static models first, then dynamic
-  let dynamicModels = [];
-  try {
-    dynamicModels = await fetchActiveGroqModels(key);
-  } catch (err) {
-    if (err.message && err.message.includes('API Key')) throw err;
-  }
-
-  // Prioritize: static safe list (filtered by dynamic if available), then dynamic llama models
-  let candidates;
-  if (dynamicModels.length > 0) {
-    const safeFiltered = SAFE_GROQ_MODELS.filter(m => dynamicModels.includes(m));
-    const extraLlama = dynamicModels.filter(m =>
-      (m.startsWith('llama-3') || m.startsWith('llama3')) &&
-      !SAFE_GROQ_MODELS.includes(m)
-    );
-    candidates = [...safeFiltered, ...extraLlama];
-    if (candidates.length === 0) candidates = dynamicModels.slice(0, 5);
-  } else {
-    candidates = [...SAFE_GROQ_MODELS];
-  }
-
-  for (const model of candidates) {
-    try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${key}`
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: 'system',
-              content: 'Bạn là trợ lý giáo viên tiếng Anh & khảo thí xuất sắc. Luôn trả lời bằng tiếng Việt một cách sư phạm, súc tích, dễ hiểu.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 600
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content?.trim();
-        if (content) return content;
-      } else {
-        const errData = await response.json().catch(() => ({}));
-        const errMsg = errData.error?.message || '';
-        if (response.status === 401) {
-          throw new Error('Groq API Key không hợp lệ hoặc đã hết hạn.');
-        }
-        // Model decommissioned/unavailable → skip silently
-        if (isModelUnavailableError(errMsg)) continue;
-        lastError = new Error(errMsg || `Lỗi Groq model ${model}`);
-        continue;
-      }
-    } catch (err) {
-      if (err.message && err.message.includes('không hợp lệ')) throw err;
-      lastError = err;
-    }
-  }
-
-  throw lastError || new Error('Không thể kết nối với các mô hình Groq.');
-}
-
-// Standard Gemini candidate models
-const SAFE_GEMINI_MODELS = [
-  'gemini-1.5-flash-latest',
-  'gemini-1.5-flash',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-exp',
-  'gemini-1.5-flash-8b',
-  'gemini-1.5-pro',
-  'gemini-pro'
-];
-
-/**
- * Fetch available Gemini models that support generateContent
+ * Lấy danh sách mô hình Google Gemini khả dụng
  */
 async function fetchActiveGeminiModels(apiKey) {
   try {
@@ -183,6 +122,76 @@ async function fetchActiveGeminiModels(apiKey) {
   }
 }
 
+/**
+ * Gọi Groq API để tạo lời giải thích (100% Tiếng Việt)
+ */
+async function callGroq({ prompt, apiKey }) {
+  const key = apiKey.trim();
+  let dynamicModels = [];
+  try {
+    dynamicModels = await fetchActiveGroqModels(key);
+  } catch (err) {
+    if (err.message && err.message.includes('API Key')) throw err;
+  }
+
+  const candidates = [
+    ...SAFE_GROQ_MODELS.filter(m => dynamicModels.includes(m)),
+    ...dynamicModels.filter(m => !SAFE_GROQ_MODELS.includes(m) && !DECOMMISSIONED_GROQ_MODELS.includes(m)),
+    ...SAFE_GROQ_MODELS
+  ];
+  const candidateModels = Array.from(new Set(candidates));
+  let lastError = null;
+
+  for (const model of candidateModels) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: 'Bạn là chuyên gia giáo dục và khảo thí tiếng Anh xuất sắc. BẮT BUỘC TRẢ LỜI 100% BẰNG TIẾNG VIỆT. TUYỆT ĐỐI KHÔNG DÙNG TIẾNG ANH ĐỂ GIẢI THÍCH (chỉ giữ nguyên các từ tiếng Anh khi trích dẫn đề bài hoặc từ vựng cần phân tích). Giải thích chi tiết, sư phạm, chuẩn xác.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 800
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content?.trim();
+        if (content) return content;
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        const errMsg = errData.error?.message || '';
+        if (response.status === 401) {
+          throw new Error('Groq API Key không hợp lệ hoặc đã hết hạn.');
+        }
+        lastError = new Error(translateAiError(errMsg) || `Lỗi Groq model ${model}`);
+        continue;
+      }
+    } catch (err) {
+      if (err.message && err.message.includes('không hợp lệ')) throw err;
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('Không thể kết nối với các mô hình Groq.');
+}
+
+/**
+ * Gọi Google Gemini API để tạo lời giải thích (100% Tiếng Việt)
+ */
 async function callGemini({ prompt, apiKey }) {
   const key = apiKey.trim();
   let dynamicModels = [];
@@ -192,13 +201,11 @@ async function callGemini({ prompt, apiKey }) {
     if (err.message && err.message.includes('API Key')) throw err;
   }
 
-  // Prioritize safe list matches first, then any other valid models
   const candidates = [
     ...SAFE_GEMINI_MODELS.filter(m => dynamicModels.length === 0 || dynamicModels.includes(m)),
     ...dynamicModels.filter(m => !SAFE_GEMINI_MODELS.includes(m))
   ];
   const modelsToTry = candidates.length > 0 ? Array.from(new Set(candidates)) : SAFE_GEMINI_MODELS;
-
   let lastError = null;
 
   for (const model of modelsToTry) {
@@ -212,7 +219,7 @@ async function callGemini({ prompt, apiKey }) {
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
               temperature: 0.3,
-              maxOutputTokens: 600
+              maxOutputTokens: 800
             }
           })
         }
@@ -228,7 +235,7 @@ async function callGemini({ prompt, apiKey }) {
         if (errMsg.includes('not found') || errMsg.includes('not supported') || response.status === 404) {
           continue;
         }
-        lastError = new Error(errMsg);
+        lastError = new Error(translateAiError(errMsg));
       }
     } catch (err) {
       lastError = err;
@@ -238,6 +245,9 @@ async function callGemini({ prompt, apiKey }) {
   throw lastError || new Error('Không thể kết nối với các mô hình Google Gemini.');
 }
 
+/**
+ * Sinh lời giải thích AI chi tiết (100% Tiếng Việt)
+ */
 async function generateExplanation({
   question,
   options = [],
@@ -249,23 +259,26 @@ async function generateExplanation({
 }) {
   const key = (apiKey && apiKey.trim()) || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || '';
 
-  const prompt = `Bạn là trợ lý giáo viên tiếng Anh & khảo thí xuất sắc. Hãy giải thích ngắn gọn, súc tích và dễ hiểu cho câu trắc nghiệm sau bằng tiếng Việt:
-Câu hỏi: ${question}
-Các lựa chọn:
-${options.map((opt, i) => `${opt.label || String.fromCharCode(65 + i)}. ${opt.text}`).join('\n')}
-Đáp án đúng: ${options[correctAnswer]?.label || String.fromCharCode(65 + correctAnswer)}. ${options[correctAnswer]?.text || ''}
-${studentAnswer !== -1 && studentAnswer !== correctAnswer ? `Học sinh đã chọn sai: ${options[studentAnswer]?.label || String.fromCharCode(65 + studentAnswer)}. ${options[studentAnswer]?.text || ''}` : ''}
-Chủ điểm ngữ pháp / Unit: ${unit || 'Tổng hợp'}
+  const prompt = `YÊU CẦU BẮT BUỘC: TOÀN BỘ BÀI GIẢI PHẢI ĐƯỢC VIẾT 100% BẰNG TIẾNG VIỆT. TUYỆT ĐỐI KHÔNG GIẢI THÍCH BẰNG TIẾNG ANH (ngoại trừ trích dẫn các từ vựng hoặc câu của đề bài).
 
-Cấu trúc trả lời gồm 3 phần:
-1. 🎯 Đáp án chính xác & Dịch nghĩa câu hỏi.
-2. 💡 Phân tích ngữ pháp / từ vựng: Tại sao chọn đáp án này và tại sao các phương án khác chưa chính xác.
-3. 📌 Mẹo ghi nhớ nhanh.`;
+Bạn là một giáo viên chuyên môn giỏi, tận tâm và giàu kinh nghiệm luyện thi. Hãy phân tích và giải thích cặn kẽ câu trắc nghiệm sau bằng tiếng Việt:
+
+ĐỀ BÀI:
+- Câu hỏi: ${question}
+- Các lựa chọn:
+${options.map((opt, i) => `  ${opt.label || String.fromCharCode(65 + i)}. ${opt.text}`).join('\n')}
+- Đáp án chính xác: ${options[correctAnswer]?.label || String.fromCharCode(65 + correctAnswer)}. ${options[correctAnswer]?.text || ''}
+${studentAnswer !== -1 && studentAnswer !== correctAnswer ? `- Học sinh đã chọn: ${options[studentAnswer]?.label || String.fromCharCode(65 + studentAnswer)}. ${options[studentAnswer]?.text || ''} (Đáp án này chưa chính xác)\n` : ''}- Chủ điểm kiến thức: ${unit || 'Ngữ pháp & Từ vựng tiếng Anh tổng hợp'}
+
+HÃY TRÌNH BÀY LỜI GIẢI THEO CẤU TRÚC 3 PHẦN BẰNG TIẾNG VIỆT:
+🎯 **Đáp án đúng:** [Ghi rõ chữ cái và nội dung đáp án + Dịch nghĩa câu hỏi sang tiếng Việt hoàn chỉnh]
+💡 **Phân tích chi tiết:** [Phân tích ngữ pháp/từ vựng chi tiết: Vì sao chọn đáp án này? Dấu hiệu nhận biết là gì? Vì sao các phương án còn lại là phương án nhiễu sai?]
+📌 **Mẹo ghi nhớ nhanh:** [Công thức hoặc quy tắc cốt lõi giúp học sinh ghi nhớ áp dụng nhanh cho các bài thi sau]`;
 
   if (key) {
     const isGroq = provider === 'groq' || (provider === 'auto' && (key.startsWith('gsk_') || process.env.GROQ_API_KEY === key));
-    
-    // 1. Try Groq
+
+    // 1. Thử Groq
     if (isGroq) {
       try {
         const text = await callGroq({ prompt, apiKey: key });
@@ -275,7 +288,7 @@ Cấu trúc trả lời gồm 3 phần:
       }
     }
 
-    // 2. Try Gemini
+    // 2. Thử Gemini
     try {
       const text = await callGemini({ prompt, apiKey: key });
       if (text) return text;
@@ -284,12 +297,12 @@ Cấu trúc trả lời gồm 3 phần:
     }
   }
 
-  // 3. Fallback to built-in rule engine
+  // 3. Fallback sang bộ quy tắc sư phạm tích hợp (100% tiếng Việt offline)
   return generateRuleBasedExplanation({ question, options, correctAnswer, studentAnswer, unit });
 }
 
 /**
- * Verify if provided Groq or Gemini API Key is valid
+ * Kiểm tra kết nối và tính hợp lệ của API Key (Groq hoặc Gemini)
  */
 async function testApiKey(apiKey, provider = 'auto') {
   if (!apiKey || !apiKey.trim()) {
@@ -301,12 +314,12 @@ async function testApiKey(apiKey, provider = 'auto') {
   if (isGroq) {
     let availableModels = [];
 
-    // 1. Probe Groq models endpoint to validate key quickly
+    // 1. Thăm dò models endpoint của Groq
     try {
       availableModels = await fetchActiveGroqModels(key);
     } catch (err) {
       if (err.message && err.message.includes('API Key')) {
-        throw new Error(`Groq: ${err.message}`);
+        throw new Error(`Groq: ${translateAiError(err.message)}`);
       }
     }
 
@@ -345,15 +358,15 @@ async function testApiKey(apiKey, provider = 'auto') {
             throw new Error('API Key Groq không chính xác hoặc đã hết hạn.');
           }
           if (testRes.status === 429) {
-            throw new Error(`Groq: Vượt quá giới hạn lượt gọi (Rate Limit): ${errMsg}`);
+            throw new Error(`Groq: Vượt quá giới hạn lượt gọi (Rate Limit): ${translateAiError(errMsg)}`);
           }
-          attemptedErrors.push(`[${model}]: ${errMsg}`);
+          attemptedErrors.push(`[${model}]: ${translateAiError(errMsg)}`);
         }
       } catch (err) {
         if (err.message && (err.message.includes('API Key') || err.message.includes('Rate Limit'))) {
           throw err;
         }
-        attemptedErrors.push(`[${model}]: ${err.message}`);
+        attemptedErrors.push(`[${model}]: ${translateAiError(err.message)}`);
       }
     }
 
@@ -362,23 +375,23 @@ async function testApiKey(apiKey, provider = 'auto') {
         success: true,
         provider: 'groq',
         model: `${workingModel} (Groq Cloud)`,
-        message: `🎉 Kết nối Groq Cloud API thành công! Mô hình ${workingModel} phản hồi siêu tốc.`
+        message: `🎉 Kết nối Groq Cloud API thành công! Mô hình ${workingModel} phản hồi siêu tốc bằng Tiếng Việt.`
       };
     } else {
       const availableStr = availableModels.length > 0
-        ? `Models có sẵn từ API: ${availableModels.join(', ')}`
-        : 'Không có model nào trả về từ API /v1/models';
+        ? `Models có sẵn trên tài khoản: ${availableModels.join(', ')}`
+        : 'Không lấy được danh sách model';
       const detailMsg = attemptedErrors.length > 0 ? attemptedErrors.join(' | ') : 'Không có phản hồi từ máy chủ';
       throw new Error(`Groq (${availableStr}): ${detailMsg}`);
     }
   } else {
-    // Test as Gemini
+    // Test Gemini
     let availableModels = [];
     try {
       availableModels = await fetchActiveGeminiModels(key);
     } catch (err) {
       if (err.message && err.message.includes('API Key')) {
-        throw new Error(`Gemini: ${err.message}`);
+        throw new Error(`Gemini: ${translateAiError(err.message)}`);
       }
     }
 
@@ -417,7 +430,7 @@ async function testApiKey(apiKey, provider = 'auto') {
           if (errMsg.includes('not found') || errMsg.includes('not supported') || response.status === 404) {
             continue;
           }
-          lastError = new Error(errMsg);
+          lastError = new Error(translateAiError(errMsg));
         }
       } catch (err) {
         if (err.message && err.message.includes('API Key')) throw err;
@@ -430,7 +443,7 @@ async function testApiKey(apiKey, provider = 'auto') {
         success: true,
         provider: 'gemini',
         model: `${workingModel} (Google Gemini)`,
-        message: `🎉 Kết nối Google Gemini thành công! Mô hình ${workingModel} sẵn sàng hoạt động.`
+        message: `🎉 Kết nối Google Gemini thành công! Mô hình ${workingModel} sẵn sàng hoạt động bằng Tiếng Việt.`
       };
     } else {
       throw new Error(`Gemini: ${lastError?.message || 'Không tìm thấy mô hình Gemini khả dụng cho API Key này.'}`);
@@ -438,6 +451,9 @@ async function testApiKey(apiKey, provider = 'auto') {
   }
 }
 
+/**
+ * Bộ quy tắc sư phạm tích hợp (Offline Rule-Based) - 100% Tiếng Việt
+ */
 function generateRuleBasedExplanation({ question, options, correctAnswer, studentAnswer, unit }) {
   const correctOpt = options[correctAnswer] || { label: 'A', text: '' };
   const optLabels = ['A', 'B', 'C', 'D'];
