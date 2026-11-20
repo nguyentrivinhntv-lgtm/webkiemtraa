@@ -177,7 +177,9 @@ async function generateExplanation({
   apiKey = '',
   provider = 'auto'
 }) {
-  const key = (apiKey && apiKey.trim()) || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || '';
+  const rawKey = apiKey || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || '';
+  const key = rawKey.trim();
+  let aiError = '';
 
   const subject = quizTitle || unit || 'Kiến thức chuyên môn bài thi';
 
@@ -200,29 +202,57 @@ HÃY TRÌNH BÀY LỜI GIẢI THEO CẤU TRÚC 3 PHẦN (100% TIẾNG VIỆT):
 📌 **Mẹo ghi nhớ nhanh:** [Từ khóa cốt lõi hoặc quy tắc ngắn gọn giúp ghi nhớ nhanh]`;
 
   if (key) {
-    const isGroq = provider === 'groq' || (provider === 'auto' && (key.startsWith('gsk_') || process.env.GROQ_API_KEY === key));
+    const isGroq = provider === 'groq' || (provider === 'auto' && (key.startsWith('gsk_') || (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim() === key)));
 
     // 1. Thử Groq
     if (isGroq) {
       try {
         const text = await callGroq({ prompt, apiKey: key });
-        if (text) return text;
+        if (text) {
+          return {
+            explanation: text,
+            isAi: true,
+            provider: 'groq'
+          };
+        }
       } catch (err) {
         console.warn('Groq API call failed:', err.message);
+        aiError = err.message;
       }
     }
 
     // 2. Thử Gemini
     try {
       const text = await callGemini({ prompt, apiKey: key });
-      if (text) return text;
+      if (text) {
+        return {
+          explanation: text,
+          isAi: true,
+          provider: 'gemini'
+        };
+      }
     } catch (err) {
       console.warn('Gemini API call failed:', err.message);
+      if (!aiError) aiError = err.message;
     }
   }
 
-  // 3. Fallback sang bộ quy tắc sư phạm tích hợp (100% tiếng Việt offline)
-  return generateRuleBasedExplanation({ question, options, correctAnswer, studentAnswer, unit });
+  // 3. Fallback sang bộ phân tích tích hợp (Offline)
+  const ruleExplanation = generateRuleBasedExplanation({ question, options, correctAnswer, studentAnswer, unit, quizTitle });
+  const notice = aiError
+    ? `> ⚠️ *Lưu ý: Không thể kết nối với Trợ lý AI (${aiError}). Dưới đây là phân tích tự động từ hệ thống:*
+
+`
+    : (!key ? `> 💡 *Lưu ý: Chưa cấu hình API Key cá nhân trong Hồ sơ. Dưới đây là phân tích tự động từ hệ thống:*
+
+` : '');
+
+  return {
+    explanation: notice + ruleExplanation,
+    isAi: false,
+    provider: 'offline',
+    reason: aiError || (key ? 'AI không phản hồi' : 'Chưa cấu hình API Key')
+  };
 }
 
 /**
@@ -378,39 +408,52 @@ async function testApiKey(apiKey, provider = 'auto') {
 /**
  * Bộ quy tắc sư phạm tích hợp (Offline Rule-Based) - 100% Tiếng Việt
  */
-function generateRuleBasedExplanation({ question, options, correctAnswer, studentAnswer, unit }) {
+function generateRuleBasedExplanation({ question, options, correctAnswer, studentAnswer, unit, quizTitle }) {
   const correctOpt = options[correctAnswer] || { label: 'A', text: '' };
   const optLabels = ['A', 'B', 'C', 'D'];
   const correctLabel = correctOpt.label || optLabels[correctAnswer] || 'A';
   const correctText = correctOpt.text || '';
 
   const qLower = (question || '').toLowerCase();
+  const contextLower = ((quizTitle || '') + ' ' + (unit || '') + ' ' + (question || '')).toLowerCase();
+  const hasVietnamese = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđĐ]/.test(question || '');
+
   let analysis = '';
   let tip = '';
 
-  if (qLower.includes('yesterday') || qLower.includes('ago') || qLower.includes('last year') || qLower.includes('last night') || qLower.includes('in 19') || qLower.includes('in 20')) {
-    analysis = `Trong câu xuất hiện dấu hiệu thời gian quá khứ đơn (Past Simple). Động từ cần chia ở dạng V2/V-ed. Phương án **${correctLabel} (${correctText})** là dạng quá khứ chính xác của động từ cần điền.`;
-    tip = `Ghi nhớ dấu hiệu Quá khứ đơn: *yesterday, ago, last + time, in + năm quá khứ*.`;
-  } else if (qLower.includes('tomorrow') || qLower.includes('next week') || qLower.includes('next month') || qLower.includes('soon')) {
-    analysis = `Câu có trạng từ chỉ tương lai (*tomorrow, next week*). Ta dùng thì Tương lai đơn (*will + V*) hoặc thì Hiện tại tiếp diễn chỉ kế hoạch. Do đó **${correctLabel} (${correctText})** là cấu trúc phù hợp.`;
-    tip = `Dấu hiệu Tương lai: *tomorrow, next, in the future, soon*.`;
-  } else if (qLower.includes('already') || qLower.includes('since') || qLower.includes('for 3') || qLower.includes('for two') || qLower.includes('just') || qLower.includes('yet')) {
-    analysis = `Câu xuất hiện trạng từ nhận biết thì Hiện tại hoàn thành (Present Perfect: *have/has + V3/V-ed*). Phương án **${correctLabel} (${correctText})** đúng cấu trúc và hòa hợp chủ ngữ.`;
-    tip = `Hiện tại hoàn thành: *since + mốc thời gian, for + khoảng thời gian, already, yet, just*.`;
-  } else if (qLower.includes('if ') || qLower.startsWith('if')) {
-    analysis = `Đây là câu điều kiện (Conditional sentence). Cần xét thì ở mệnh đề If và mệnh đề chính. Lựa chọn **${correctLabel} (${correctText})** thỏa mãn quy tắc phối hợp thì.`;
-    tip = `Nhận diện loại câu điều kiện bằng cách nhìn vào mệnh đề đã cho sẵn thì.`;
-  } else if (qLower.includes('more ') || qLower.includes(' than') || qLower.includes('the most') || qLower.includes('the best') || qLower.includes('as ... as')) {
-    analysis = `Câu kiểm tra cấu trúc so sánh (Comparison). Phương án **${correctLabel} (${correctText})** tuân thủ đúng dạng so sánh hơn/so sánh nhất của tính từ/trạng từ.`;
-    tip = `So sánh hơn: tính từ ngắn + *er than*, tính từ dài: *more + adj + than*. So sánh nhất: *the + est / the most + adj*.`;
-  } else if (qLower.includes('preposition') || qLower.includes('interested') || qLower.includes('fond') || qLower.includes('good at') || qLower.includes('depend')) {
-    analysis = `Câu kiểm tra cụm giới từ cố định (Collocation / Prepositional phrase). Giới từ đi kèm chính xác với ngữ cảnh câu là **${correctLabel} (${correctText})**.`;
-    tip = `Học giới từ theo cụm: *interested in, good at, fond of, depend on, proud of*.`;
-  } else if (qLower.includes('luật') || qLower.includes('pháp luật') || qLower.includes('văn bản') || qLower.includes('quy định') || qLower.includes('cơ quan') || qLower.includes('nhà nước') || qLower.includes('thẩm quyền') || qLower.includes('bắt buộc') || qLower.includes('quy chuẩn') || qLower.includes('hành chính') || qLower.includes('hình sự') || qLower.includes('dân sự')) {
-    analysis = `Căn cứ theo lý luận và quy định của pháp luật hiện hành, phương án **${correctLabel} (${correctText})** phản ánh chính xác và đầy đủ nhất bản chất của nội dung được hỏi.`;
-    tip = `Ghi nhớ các đặc điểm cốt lõi của pháp luật: Tính quy phạm phổ biến (bắt buộc chung), do Nhà nước ban hành/bảo đảm và được áp dụng nhiều lần.`;
-  } else {
-    analysis = `Xét theo kiến thức chuyên môn của câu hỏi, phương án **${correctLabel} (${correctText})** là đáp án chính xác và toàn diện nhất theo chuẩn kiến thức bài thi.`;
+  // 1. Nếu là môn Pháp luật / Văn bản quy phạm pháp luật
+  if (contextLower.includes('luật') || contextLower.includes('pháp luật') || contextLower.includes('văn bản') || contextLower.includes('quy định') || contextLower.includes('quy phạm') || contextLower.includes('cơ quan') || contextLower.includes('nhà nước') || contextLower.includes('thẩm quyền') || contextLower.includes('nghị định') || contextLower.includes('thông tư') || contextLower.includes('hình sự') || contextLower.includes('dân sự') || contextLower.includes('hành chính') || contextLower.includes('tố tụng') || contextLower.includes('hiến pháp') || contextLower.includes('hợp đồng') || contextLower.includes('nghĩa vụ')) {
+    analysis = `Căn cứ theo lý luận Nhà nước & Pháp luật và các quy định hiện hành, phương án **${correctLabel} (${correctText})** là đáp án chính xác và đầy đủ nhất. Các phương án còn lại chỉ nêu một phần hoặc không đúng thẩm quyền/bản chất pháp lý được đề cập trong câu hỏi.`;
+    tip = `Ghi nhớ các đặc điểm cốt lõi của pháp luật: Tính quy phạm phổ biến (bắt buộc chung), do cơ quan nhà nước có thẩm quyền ban hành/bảo đảm thực hiện, và được áp dụng nhiều lần trong đời sống.`;
+  }
+  // 2. Nếu là môn Tiếng Anh (không có dấu tiếng Việt hoặc có từ khóa tiếng Anh)
+  else if (!hasVietnamese || contextLower.includes('english') || contextLower.includes('tiếng anh') || contextLower.includes('grammar') || contextLower.includes('vocabulary')) {
+    if (qLower.includes('yesterday') || qLower.includes('ago') || qLower.includes('last year') || qLower.includes('last night')) {
+      analysis = `Trong câu xuất hiện dấu hiệu thời gian quá khứ đơn (Past Simple). Động từ cần chia ở dạng V2/V-ed. Phương án **${correctLabel} (${correctText})** là dạng quá khứ chính xác của động từ cần điền.`;
+      tip = `Ghi nhớ dấu hiệu Quá khứ đơn: *yesterday, ago, last + time*.`;
+    } else if (qLower.includes('tomorrow') || qLower.includes('next week') || qLower.includes('next month') || qLower.includes('soon')) {
+      analysis = `Câu có trạng từ chỉ tương lai (*tomorrow, next week*). Ta dùng thì Tương lai đơn (*will + V*) hoặc thì Hiện tại tiếp diễn chỉ kế hoạch. Do đó **${correctLabel} (${correctText})** là cấu trúc phù hợp.`;
+      tip = `Dấu hiệu Tương lai: *tomorrow, next, in the future, soon*.`;
+    } else if (qLower.includes('already') || qLower.includes('since') || qLower.includes('for 3') || qLower.includes('for two') || qLower.includes('just') || qLower.includes('yet')) {
+      analysis = `Câu xuất hiện trạng từ nhận biết thì Hiện tại hoàn thành (Present Perfect: *have/has + V3/V-ed*). Phương án **${correctLabel} (${correctText})** đúng cấu trúc và hòa hợp chủ ngữ.`;
+      tip = `Hiện tại hoàn thành: *since + mốc thời gian, for + khoảng thời gian, already, yet, just*.`;
+    } else if (qLower.includes('if ') || qLower.startsWith('if')) {
+      analysis = `Đây là câu điều kiện (Conditional sentence). Cần xét thì ở mệnh đề If và mệnh đề chính. Lựa chọn **${correctLabel} (${correctText})** thỏa mãn quy tắc phối hợp thì.`;
+      tip = `Nhận diện loại câu điều kiện bằng cách nhìn vào mệnh đề đã cho sẵn thì.`;
+    } else if (qLower.includes('more ') || qLower.includes(' than') || qLower.includes('the most') || qLower.includes('the best') || qLower.includes('as ... as')) {
+      analysis = `Câu kiểm tra cấu trúc so sánh (Comparison). Phương án **${correctLabel} (${correctText})** tuân thủ đúng dạng so sánh hơn/so sánh nhất của tính từ/trạng từ.`;
+      tip = `So sánh hơn: tính từ ngắn + *er than*, tính từ dài: *more + adj + than*. So sánh nhất: *the + est / the most + adj*.`;
+    } else if (qLower.includes('preposition') || qLower.includes('interested') || qLower.includes('fond') || qLower.includes('good at') || qLower.includes('depend')) {
+      analysis = `Câu kiểm tra cụm giới từ cố định (Collocation / Prepositional phrase). Giới từ đi kèm chính xác với ngữ cảnh câu là **${correctLabel} (${correctText})**.`;
+      tip = `Học giới từ theo cụm: *interested in, good at, fond of, depend on, proud of*.`;
+    } else {
+      analysis = `Xét theo ngữ cảnh câu và ngữ pháp tiếng Anh, phương án **${correctLabel} (${correctText})** là đáp án chính xác nhất, đảm bảo tính liên kết từ vựng và cấu trúc ngữ pháp chuẩn xác.`;
+      tip = `Đọc kỹ chủ ngữ và động từ chính trong câu để xác định thì và dạng từ phù hợp.`;
+    }
+  }
+  // 3. Các môn học Tiếng Việt tổng quát khác
+  else {
+    analysis = `Căn cứ theo nội dung đề bài và kiến thức chuyên môn, phương án **${correctLabel} (${correctText})** là đáp án chính xác và toàn diện nhất theo chuẩn kiến thức bài thi.`;
     tip = `Đọc kỹ câu hỏi và các phương án gây nhiễu để chọn đáp án bao quát nhất.`;
   }
 
@@ -418,7 +461,12 @@ function generateRuleBasedExplanation({ question, options, correctAnswer, studen
   if (studentAnswer !== -1 && studentAnswer !== correctAnswer) {
     const wrongOpt = options[studentAnswer];
     const wrongLabel = wrongOpt?.label || optLabels[studentAnswer] || 'B';
-    studentNote = `\n- ⚠️ **Lỗi thường gặp:** Bạn đã chọn **${wrongLabel}**, đây là phương án gây nhiễu vì sai dạng từ hoặc không phù hợp với chủ ngữ/thì của câu.`;
+    const wrongText = wrongOpt?.text ? ` (${wrongOpt.text})` : '';
+    if (!hasVietnamese) {
+      studentNote = `\n- ⚠️ **Lỗi thường gặp:** Bạn đã chọn **${wrongLabel}${wrongText}**, đây là phương án gây nhiễu chưa đúng cấu trúc ngữ pháp hoặc từ vựng của câu.`;
+    } else {
+      studentNote = `\n- ⚠️ **Lưu ý phương án đã chọn:** Bạn đã chọn **${wrongLabel}${wrongText}**, đây là phương án chưa chính xác hoặc chưa bao quát đầy đủ theo yêu cầu của câu hỏi.`;
+    }
   }
 
   return `🎯 **Đáp án đúng:** **${correctLabel}. ${correctText}**

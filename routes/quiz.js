@@ -46,29 +46,38 @@ router.post('/ai-explain', async (req, res) => {
     }
 
     // 2. Nếu chưa có, gọi AI để sinh lời giải thích chuyên sâu (100% Tiếng Việt)
-    const explanation = await generateExplanation({
+    const result = await generateExplanation({
       question,
       options,
       correctAnswer: cAnswer,
       studentAnswer: sAnswer,
       unit: unit || '',
       quizTitle: quizTitle || '',
-      apiKey: clientKey
+      apiKey: clientKey,
+      provider: req.body.provider || 'auto'
     });
 
-    // 3. Tự động lưu lời giải thích vào Cơ Sở Dữ Liệu (JSON + MongoDB + Quiz metadata)
-    if (explanation) {
+    const explanationText = typeof result === 'object' ? result.explanation : result;
+    const isRealAi = typeof result === 'object' ? result.isAi : true;
+    const providerUsed = typeof result === 'object' ? result.provider : 'ai';
+    const reasonMsg = typeof result === 'object' ? result.reason : '';
+
+    // 3. CHỈ TỰ ĐỘNG LƯU VÀO CSDL KHI THỰC SỰ LÀ AI TRẢ LỜI (Không lưu nháp offline)
+    if (explanationText && isRealAi) {
       await saveCachedExplanation({
         question,
         correctAnswer: cAnswer,
         quizId,
         questionIndex,
-        explanation
+        explanation: explanationText
       });
     }
 
     res.json({
-      explanation,
+      explanation: explanationText,
+      isAi: isRealAi,
+      provider: providerUsed,
+      reason: reasonMsg,
       fromCache: false
     });
   } catch (err) {

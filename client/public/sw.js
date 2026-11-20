@@ -1,5 +1,5 @@
-const CACHE_NAME = 'quizmaster-pwa-v2';
-const DATA_CACHE_NAME = 'quizmaster-api-v2';
+const CACHE_NAME = 'quizmaster-pwa-v3';
+const DATA_CACHE_NAME = 'quizmaster-api-v3';
 
 const STATIC_ASSETS = [
   '/',
