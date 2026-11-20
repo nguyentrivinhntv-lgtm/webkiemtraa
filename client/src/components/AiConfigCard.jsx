@@ -96,7 +96,7 @@ function AiConfigCard() {
       </div>
 
       <p className="text-secondary small mb-3 lh-base">
-        Hệ thống hỗ trợ <strong>Groq Cloud API (Llama 3.3 70B Siêu Tốc)</strong> và <strong>Google Gemini API</strong>. Cả 2 đều cung cấp gói miễn phí. Chỉ cần dán API Key vào đây, hệ thống sẽ tự động nhận diện và phân tích giải thích đáp án chi tiết.
+        Hệ thống hỗ trợ <strong>Groq Cloud API (Llama 3.1 8B Siêu Tốc)</strong> và <strong>Google Gemini API</strong>. Cả 2 đều cung cấp gói miễn phí. Chỉ cần dán API Key vào đây, hệ thống sẽ tự động nhận diện và phân tích giải thích đáp án chi tiết.
       </p>
 
       {/* Provider Selector Pills */}
@@ -115,7 +115,7 @@ function AiConfigCard() {
             className={`btn btn-sm ${provider === 'groq' ? 'btn-warning text-dark fw-bold' : 'btn-outline-warning text-dark'}`}
             onClick={() => setProvider('groq')}
           >
-            <FaBolt className="text-warning" /> Groq Cloud (Llama 3.3 70B)
+            <FaBolt className="text-warning" /> Groq Cloud (Llama 3.1)
           </button>
           <button
             type="button"

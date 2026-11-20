@@ -1,42 +1,63 @@
 /**
  * AI Explanation Service for QuizMaster
  * Supports:
- *  1. Groq Cloud API (Llama 3.3 70B / Llama 3.1 8B - Super fast & free)
+ *  1. Groq Cloud API (Llama 3.1 8B / Llama 3 70B / Mixtral - Super fast & free)
  *  2. Google Gemini API (Gemini 1.5 Flash)
  *  3. Built-in Expert Pedagogical Rule Engine (Offline fallback)
  */
 
-async function callGroq({ prompt, apiKey }) {
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey.trim()}`
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        {
-          role: 'system',
-          content: 'Bạn là trợ lý giáo viên tiếng Anh & khảo thí xuất sắc. Luôn trả lời bằng tiếng Việt một cách sư phạm, súc tích, dễ hiểu.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.3,
-      max_tokens: 600
-    })
-  });
+const GROQ_MODELS = [
+  'llama-3.1-8b-instant',
+  'llama3-70b-8192',
+  'llama3-8b-8192',
+  'mixtral-8x7b-32768',
+  'gemma2-9b-it'
+];
 
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error?.message || `Lỗi Groq API (${response.status})`);
+async function callGroq({ prompt, apiKey }) {
+  let lastError = null;
+
+  for (const model of GROQ_MODELS) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey.trim()}`
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: 'Bạn là trợ lý giáo viên tiếng Anh & khảo thí xuất sắc. Luôn trả lời bằng tiếng Việt một cách sư phạm, súc tích, dễ hiểu.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 600
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content?.trim();
+        if (content) return content;
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        lastError = new Error(errData.error?.message || `Groq error with ${model}`);
+        // If model not found or unauthorized for this specific model, fallback to next
+        continue;
+      }
+    } catch (err) {
+      lastError = err;
+    }
   }
 
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content?.trim();
+  throw lastError || new Error('Không thể kết nối với mô hình Groq');
 }
 
 async function callGemini({ prompt, apiKey }) {
@@ -125,34 +146,45 @@ async function testApiKey(apiKey, provider = 'auto') {
   const isGroq = provider === 'groq' || (provider === 'auto' && key.startsWith('gsk_'));
 
   if (isGroq) {
-    try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${key}`
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [{ role: 'user', content: 'Trả lời đúng 1 chữ: OK' }],
-          max_tokens: 10
-        })
-      });
+    let successfulModel = null;
+    let lastError = null;
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error?.message || `Lỗi xác thực Groq API (Mã ${response.status})`);
+    for (const model of GROQ_MODELS) {
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${key}`
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: 'Trả lời đúng 1 chữ: OK' }],
+            max_tokens: 10
+          })
+        });
+
+        if (response.ok) {
+          successfulModel = model;
+          break;
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          lastError = new Error(errData.error?.message || `Lỗi xác thực Groq API (Mã ${response.status})`);
+        }
+      } catch (err) {
+        lastError = err;
       }
+    }
 
-      const data = await response.json();
+    if (successfulModel) {
       return {
         success: true,
         provider: 'groq',
-        model: 'Llama 3.3 70B (Groq Cloud)',
-        message: '🎉 Kết nối Groq Cloud API thành công! Mô hình Llama 3.3 70B hoạt động siêu tốc.'
+        model: `${successfulModel} (Groq Cloud)`,
+        message: `🎉 Kết nối Groq Cloud API thành công! Mô hình ${successfulModel} phản hồi siêu tốc.`
       };
-    } catch (err) {
-      throw new Error(`Groq: ${err.message}`);
+    } else {
+      throw new Error(`Groq: ${lastError?.message || 'Không tìm thấy mô hình khả dụng với API Key này.'}`);
     }
   } else {
     // Test as Gemini
