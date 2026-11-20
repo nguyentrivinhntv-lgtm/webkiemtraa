@@ -58,7 +58,18 @@ export const getQuizAdmin = (id) => api.get(`/quiz/${id}/admin`);
 export const submitQuiz = (id, data) => api.post(`/quiz/${id}/submit`, data);
 export const deleteQuiz = (id) => api.delete(`/quiz/${id}`);
 export const getUserSubmissions = () => api.get('/quiz/user/submissions');
-export const getAiExplanationApi = (data) => api.post('/quiz/ai-explain', data);
+export const getAiExplanationApi = (data) => {
+  const savedKey = localStorage.getItem('ai_api_key') || localStorage.getItem('gemini_api_key') || '';
+  const savedProvider = localStorage.getItem('ai_provider') || 'auto';
+  return api.post('/quiz/ai-explain', {
+    ...data,
+    apiKey: savedKey,
+    provider: savedProvider
+  }, {
+    headers: savedKey ? { 'x-gemini-key': savedKey } : {}
+  });
+};
+export const testAiKeyApi = (apiKey, provider = 'auto') => api.post('/quiz/test-ai-key', { apiKey, provider });
 
 // Study APIs (Bookmarks, Progress, Spaced Repetition)
 export const getBookmarksApi = () => api.get('/study/bookmarks');

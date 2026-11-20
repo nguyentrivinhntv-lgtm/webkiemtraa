@@ -2,13 +2,15 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const quizService = require('../services/quizService');
-const { generateExplanation } = require('../services/aiService');
+const { generateExplanation, testGeminiApiKey } = require('../services/aiService');
 const { optionalToken, verifyToken, requireRole } = require('../middleware/auth');
 
 // POST /api/quiz/ai-explain - Intelligent AI question explanation
 router.post('/ai-explain', async (req, res) => {
   try {
-    const { question, options, correctAnswer, studentAnswer, unit } = req.body;
+    const { question, options, correctAnswer, studentAnswer, unit, apiKey } = req.body;
+    const clientKey = apiKey || req.headers['x-gemini-key'] || '';
+
     if (!question) {
       return res.status(400).json({ error: 'Thiếu thông tin câu hỏi' });
     }
@@ -18,13 +20,26 @@ router.post('/ai-explain', async (req, res) => {
       options,
       correctAnswer: correctAnswer !== undefined ? parseInt(correctAnswer) : 0,
       studentAnswer: studentAnswer !== undefined ? parseInt(studentAnswer) : -1,
-      unit: unit || ''
+      unit: unit || '',
+      apiKey: clientKey
     });
 
     res.json({ explanation });
   } catch (err) {
     console.error('Lỗi sinh lời giải thích AI:', err);
     res.status(500).json({ error: 'Lỗi khi tạo lời giải thích: ' + err.message });
+  }
+});
+
+// POST /api/quiz/test-ai-key - Test Groq or Google Gemini API Key
+router.post('/test-ai-key', async (req, res) => {
+  try {
+    const { apiKey, provider } = req.body;
+    const clientKey = apiKey || req.headers['x-gemini-key'] || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || '';
+    const result = await testGeminiApiKey(clientKey, provider || 'auto');
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

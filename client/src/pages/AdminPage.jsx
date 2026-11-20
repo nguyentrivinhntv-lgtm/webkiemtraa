@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   FaUpload, FaTrash, FaCheck, FaTimes, FaFileWord, FaFileExcel, FaDownload,
-  FaSpinner, FaPaste, FaBookOpen, FaPlay, FaEye, FaPlus, FaLightbulb
+  FaSpinner, FaPaste, FaBookOpen, FaPlay, FaEye, FaPlus, FaLightbulb, FaRobot
 } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import {
   uploadWordFile, parseTextQuestions, confirmQuiz,
   getQuizList, deleteQuiz, downloadExcelTemplateApi
 } from '../services/api'
+import AiConfigCard from '../components/AiConfigCard'
 
 function AdminPage() {
   const [quizzes, setQuizzes] = useState([])
@@ -172,7 +173,7 @@ function AdminPage() {
       {/* Main Upload Card */}
       <div className="card-custom mb-4 border">
         {/* Tab Selection */}
-        <div className="border-bottom bg-light p-2 d-flex gap-2">
+        <div className="border-bottom bg-light p-2 d-flex flex-wrap gap-2">
           <button
             type="button"
             className={`btn btn-sm flex-fill py-2 fw-semibold d-flex align-items-center justify-content-center gap-2 ${
@@ -180,7 +181,7 @@ function AdminPage() {
             }`}
             onClick={() => { setActiveTab('file'); setPreview(null); }}
           >
-            <FaFileWord className="text-primary-emphasis" /> <FaFileExcel className="text-success" /> Tải file Word (.docx) / Excel (.xlsx)
+            <FaFileWord className="text-primary-emphasis" /> <FaFileExcel className="text-success" /> Tải file Word / Excel
           </button>
           <button
             type="button"
@@ -190,6 +191,15 @@ function AdminPage() {
             onClick={() => { setActiveTab('text'); setPreview(null); }}
           >
             <FaPaste /> Dán văn bản (Copy/Paste)
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm flex-fill py-2 fw-semibold d-flex align-items-center justify-content-center gap-2 ${
+              activeTab === 'ai' ? 'btn-primary' : 'btn-outline-secondary bg-white'
+            }`}
+            onClick={() => { setActiveTab('ai'); setPreview(null); }}
+          >
+            <FaRobot className="text-info" /> Cấu hình Trợ lý AI (Gemini)
           </button>
         </div>
 
@@ -338,6 +348,13 @@ D. gone
                 )}
               </button>
             </form>
+          )}
+
+          {/* TAB 3: AI Configuration */}
+          {activeTab === 'ai' && (
+            <div>
+              <AiConfigCard />
+            </div>
           )}
         </div>
       </div>

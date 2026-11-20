@@ -8,6 +8,7 @@ import {
   FaUserGraduate, FaCalendarAlt, FaCheckCircle, FaClock, FaHistory,
   FaTrophy, FaMedal, FaStar, FaFire, FaBolt, FaCrown, FaShieldAlt
 } from 'react-icons/fa';
+import AiConfigCard from '../components/AiConfigCard';
 
 export default function ProfilePage() {
   const { user, updateCurrentUser } = useAuth();
@@ -338,6 +339,11 @@ export default function ProfilePage() {
                 {savingPassword ? 'Đang xử lý...' : 'Cập Nhật Mật Khẩu'}
               </button>
             </form>
+          </div>
+
+          {/* AI Gemini API Configuration Card */}
+          <div className="mt-4">
+            <AiConfigCard />
           </div>
         </div>
 

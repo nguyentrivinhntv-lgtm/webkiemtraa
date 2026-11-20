@@ -1,25 +1,81 @@
 /**
  * AI Explanation Service for QuizMaster
- * Supports Google Gemini API if GEMINI_API_KEY is configured,
- * with a built-in expert pedagogical heuristic engine as instant fallback.
+ * Supports:
+ *  1. Groq Cloud API (Llama 3.3 70B / Llama 3.1 8B - Super fast & free)
+ *  2. Google Gemini API (Gemini 1.5 Flash)
+ *  3. Built-in Expert Pedagogical Rule Engine (Offline fallback)
  */
 
-async function generateExplanation({ question, options = [], correctAnswer = 0, studentAnswer = -1, unit = '' }) {
-  const geminiKey = process.env.GEMINI_API_KEY;
-
-  if (geminiKey && geminiKey.trim()) {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey.trim()}`,
+async function callGroq({ prompt, apiKey }) {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey.trim()}`
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: `Bạn là trợ lý giáo viên tiếng Anh & khảo thí xuất sắc. Hãy giải thích ngắn gọn, súc tích và dễ hiểu cho câu trắc nghiệm sau bằng tiếng Việt:
+          role: 'system',
+          content: 'Bạn là trợ lý giáo viên tiếng Anh & khảo thí xuất sắc. Luôn trả lời bằng tiếng Việt một cách sư phạm, súc tích, dễ hiểu.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: 600
+    })
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `Lỗi Groq API (${response.status})`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content?.trim();
+}
+
+async function callGemini({ prompt, apiKey }) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 600
+        }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `Lỗi Gemini API (${response.status})`);
+  }
+
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+}
+
+async function generateExplanation({
+  question,
+  options = [],
+  correctAnswer = 0,
+  studentAnswer = -1,
+  unit = '',
+  apiKey = '',
+  provider = 'auto'
+}) {
+  const key = (apiKey && apiKey.trim()) || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || '';
+
+  const prompt = `Bạn là trợ lý giáo viên tiếng Anh & khảo thí xuất sắc. Hãy giải thích ngắn gọn, súc tích và dễ hiểu cho câu trắc nghiệm sau bằng tiếng Việt:
 Câu hỏi: ${question}
 Các lựa chọn:
 ${options.map((opt, i) => `${opt.label || String.fromCharCode(65 + i)}. ${opt.text}`).join('\n')}
@@ -30,33 +86,104 @@ Chủ điểm ngữ pháp / Unit: ${unit || 'Tổng hợp'}
 Cấu trúc trả lời gồm 3 phần:
 1. 🎯 Đáp án chính xác & Dịch nghĩa câu hỏi.
 2. 💡 Phân tích ngữ pháp / từ vựng: Tại sao chọn đáp án này và tại sao các phương án khác chưa chính xác.
-3. 📌 Mẹo ghi nhớ nhanh.`
-                  }
-                ]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.3,
-              maxOutputTokens: 500
-            }
+3. 📌 Mẹo ghi nhớ nhanh.`;
+
+  if (key) {
+    const isGroq = provider === 'groq' || (provider === 'auto' && (key.startsWith('gsk_') || process.env.GROQ_API_KEY === key));
+    
+    // 1. Try Groq
+    if (isGroq) {
+      try {
+        const text = await callGroq({ prompt, apiKey: key });
+        if (text) return text;
+      } catch (err) {
+        console.warn('Groq API call failed:', err.message);
+      }
+    }
+
+    // 2. Try Gemini
+    try {
+      const text = await callGemini({ prompt, apiKey: key });
+      if (text) return text;
+    } catch (err) {
+      console.warn('Gemini API call failed:', err.message);
+    }
+  }
+
+  // 3. Fallback to built-in rule engine
+  return generateRuleBasedExplanation({ question, options, correctAnswer, studentAnswer, unit });
+}
+
+/**
+ * Verify if provided Groq or Gemini API Key is valid
+ */
+async function testApiKey(apiKey, provider = 'auto') {
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error('Vui lòng nhập API Key!');
+  }
+  const key = apiKey.trim();
+  const isGroq = provider === 'groq' || (provider === 'auto' && key.startsWith('gsk_'));
+
+  if (isGroq) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: 'Trả lời đúng 1 chữ: OK' }],
+          max_tokens: 10
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error?.message || `Lỗi xác thực Groq API (Mã ${response.status})`);
+      }
+
+      const data = await response.json();
+      return {
+        success: true,
+        provider: 'groq',
+        model: 'Llama 3.3 70B (Groq Cloud)',
+        message: '🎉 Kết nối Groq Cloud API thành công! Mô hình Llama 3.3 70B hoạt động siêu tốc.'
+      };
+    } catch (err) {
+      throw new Error(`Groq: ${err.message}`);
+    }
+  } else {
+    // Test as Gemini
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: 'Trả lời đúng 1 chữ: OK' }] }],
+            generationConfig: { maxOutputTokens: 10 }
           })
         }
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text && text.trim()) {
-          return text.trim();
-        }
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error?.message || `Lỗi xác thực Gemini API (Mã ${response.status})`);
       }
+
+      return {
+        success: true,
+        provider: 'gemini',
+        model: 'Gemini 1.5 Flash',
+        message: '🎉 Kết nối Google Gemini thành công! API Key hoàn toàn hợp lệ.'
+      };
     } catch (err) {
-      console.warn('Gemini API call failed, falling back to expert rule engine:', err.message);
+      throw new Error(`Gemini: ${err.message}`);
     }
   }
-
-  // Built-in Expert Rule-based Explanation Engine
-  return generateRuleBasedExplanation({ question, options, correctAnswer, studentAnswer, unit });
 }
 
 function generateRuleBasedExplanation({ question, options, correctAnswer, studentAnswer, unit }) {
@@ -69,7 +196,6 @@ function generateRuleBasedExplanation({ question, options, correctAnswer, studen
   let analysis = '';
   let tip = '';
 
-  // Grammar detection patterns
   if (qLower.includes('yesterday') || qLower.includes('ago') || qLower.includes('last year') || qLower.includes('last night') || qLower.includes('in 19') || qLower.includes('in 20')) {
     analysis = `Trong câu xuất hiện dấu hiệu thời gian quá khứ đơn (Past Simple). Động từ cần chia ở dạng V2/V-ed. Phương án **${correctLabel} (${correctText})** là dạng quá khứ chính xác của động từ cần điền.`;
     tip = `Ghi nhớ dấu hiệu Quá khứ đơn: *yesterday, ago, last + time, in + năm quá khứ*.`;
@@ -80,7 +206,7 @@ function generateRuleBasedExplanation({ question, options, correctAnswer, studen
     analysis = `Câu xuất hiện trạng từ nhận biết thì Hiện tại hoàn thành (Present Perfect: *have/has + V3/V-ed*). Phương án **${correctLabel} (${correctText})** đúng cấu trúc và hòa hợp chủ ngữ.`;
     tip = `Hiện tại hoàn thành: *since + mốc thời gian, for + khoảng thời gian, already, yet, just*.`;
   } else if (qLower.includes('if ') || qLower.startsWith('if')) {
-    analysis = `Đây là câu điều kiện (Conditional sentence). Cần xét thì ở mệnh đề If và mệnh đề chính (Type 1: If + HTĐ, will + V; Type 2: If + QKĐ, would + V; Type 3: If + QKHT, would have + V3). Lựa chọn **${correctLabel} (${correctText})** thỏa mãn quy tắc phối hợp thì.`;
+    analysis = `Đây là câu điều kiện (Conditional sentence). Cần xét thì ở mệnh đề If và mệnh đề chính. Lựa chọn **${correctLabel} (${correctText})** thỏa mãn quy tắc phối hợp thì.`;
     tip = `Nhận diện loại câu điều kiện bằng cách nhìn vào mệnh đề đã cho sẵn thì.`;
   } else if (qLower.includes('more ') || qLower.includes(' than') || qLower.includes('the most') || qLower.includes('the best') || qLower.includes('as ... as')) {
     analysis = `Câu kiểm tra cấu trúc so sánh (Comparison). Phương án **${correctLabel} (${correctText})** tuân thủ đúng dạng so sánh hơn/so sánh nhất của tính từ/trạng từ.`;
@@ -110,5 +236,7 @@ ${tip}`;
 }
 
 module.exports = {
-  generateExplanation
+  generateExplanation,
+  testApiKey,
+  testGeminiApiKey: testApiKey
 };
