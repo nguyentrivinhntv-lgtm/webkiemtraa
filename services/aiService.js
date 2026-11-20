@@ -310,16 +310,12 @@ async function testApiKey(apiKey, provider = 'auto') {
       }
     }
 
-    // Determine list of active models to test: safe static first, then dynamic llama
     const candidates = [
-      ...SAFE_GROQ_MODELS.filter(m => availableModels.length === 0 || availableModels.includes(m)),
-      ...availableModels.filter(m =>
-        (m.startsWith('llama-3') || m.startsWith('llama')) &&
-        !DECOMMISSIONED_GROQ_MODELS.includes(m) &&
-        !SAFE_GROQ_MODELS.includes(m)
-      )
+      ...SAFE_GROQ_MODELS.filter(m => availableModels.includes(m)),
+      ...availableModels.filter(m => !SAFE_GROQ_MODELS.includes(m) && !DECOMMISSIONED_GROQ_MODELS.includes(m)),
+      ...SAFE_GROQ_MODELS
     ];
-    const modelsToTry = candidates.length > 0 ? candidates : SAFE_GROQ_MODELS;
+    const modelsToTry = Array.from(new Set(candidates));
 
     let workingModel = null;
     const attemptedErrors = [];
@@ -351,10 +347,6 @@ async function testApiKey(apiKey, provider = 'auto') {
           if (testRes.status === 429) {
             throw new Error(`Groq: Vượt quá giới hạn lượt gọi (Rate Limit): ${errMsg}`);
           }
-          // If decommissioned or unavailable, skip silently
-          if (isModelUnavailableError(errMsg)) {
-            continue;
-          }
           attemptedErrors.push(`[${model}]: ${errMsg}`);
         }
       } catch (err) {
@@ -373,10 +365,11 @@ async function testApiKey(apiKey, provider = 'auto') {
         message: `🎉 Kết nối Groq Cloud API thành công! Mô hình ${workingModel} phản hồi siêu tốc.`
       };
     } else {
-      const detailMsg = attemptedErrors.length > 0
-        ? attemptedErrors.join(' | ')
-        : 'Tất cả các mô hình chat đều không khả dụng trên tài khoản này.';
-      throw new Error(`Groq: ${detailMsg}`);
+      const availableStr = availableModels.length > 0
+        ? `Models có sẵn từ API: ${availableModels.join(', ')}`
+        : 'Không có model nào trả về từ API /v1/models';
+      const detailMsg = attemptedErrors.length > 0 ? attemptedErrors.join(' | ') : 'Không có phản hồi từ máy chủ';
+      throw new Error(`Groq (${availableStr}): ${detailMsg}`);
     }
   } else {
     // Test as Gemini
