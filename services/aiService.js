@@ -6,23 +6,105 @@
  *  3. Built-in Expert Pedagogical Rule Engine (Offline fallback)
  */
 
+// Only keep universally-available, active production models
 const SAFE_GROQ_MODELS = [
   'llama-3.1-8b-instant',
-  'llama-3.3-70b-versatile',
-  'llama-3.2-3b-preview',
-  'llama-3.2-1b-preview'
+  'llama-3.3-70b-versatile'
 ];
 
+// Explicit blacklist of models decommissioned by Groq to prevent fallback loops
+const DECOMMISSIONED_GROQ_MODELS = [
+  'llama-3.2-1b-preview',
+  'llama-3.2-3b-preview',
+  'llama-3.2-11b-vision-preview',
+  'llama-3.2-90b-vision-preview',
+  'llama-3.2-11b-text-preview',
+  'llama-3.2-90b-text-preview',
+  'llama3-8b-8192',
+  'llama3-70b-8192',
+  'mixtral-8x7b-32768',
+  'gemma-7b-it',
+  'gemma2-9b-it'
+];
+
+/**
+ * Fetch the list of active text/chat models from Groq /v1/models.
+ * Returns an array of model-id strings, or [] on failure.
+ */
+async function fetchActiveGroqModels(apiKey) {
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+    if (res.status === 401) {
+      throw new Error('API Key Groq không chính xác hoặc đã bị vô hiệu hóa.');
+    }
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data.data)) return [];
+    // Keep only text/chat models, skip audio/vision/guard/embed/tool-use-only
+    const skip = ['whisper', 'tts', 'guard', 'orpheus', 'embed', 'vision', 'scout'];
+    return data.data
+      .filter(m => {
+        const id = m.id || '';
+        if (m.active === false) return false;
+        if (DECOMMISSIONED_GROQ_MODELS.includes(id)) return false;
+        if (skip.some(s => id.includes(s))) return false;
+        return true;
+      })
+      .map(m => m.id);
+  } catch (err) {
+    if (err.message && err.message.includes('API Key')) throw err;
+    return [];
+  }
+}
+
+/**
+ * Check if an error message indicates the model is decommissioned / doesn't exist.
+ */
+function isModelUnavailableError(msg) {
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  return lower.includes('decommissioned') ||
+    lower.includes('does not exist') ||
+    lower.includes('not found') ||
+    lower.includes('no longer supported') ||
+    lower.includes('not available');
+}
+
 async function callGroq({ prompt, apiKey }) {
+  const key = apiKey.trim();
   let lastError = null;
 
-  for (const model of SAFE_GROQ_MODELS) {
+  // Build ordered candidate list: safe static models first, then dynamic
+  let dynamicModels = [];
+  try {
+    dynamicModels = await fetchActiveGroqModels(key);
+  } catch (err) {
+    if (err.message && err.message.includes('API Key')) throw err;
+  }
+
+  // Prioritize: static safe list (filtered by dynamic if available), then dynamic llama models
+  let candidates;
+  if (dynamicModels.length > 0) {
+    const safeFiltered = SAFE_GROQ_MODELS.filter(m => dynamicModels.includes(m));
+    const extraLlama = dynamicModels.filter(m =>
+      (m.startsWith('llama-3') || m.startsWith('llama3')) &&
+      !SAFE_GROQ_MODELS.includes(m)
+    );
+    candidates = [...safeFiltered, ...extraLlama];
+    if (candidates.length === 0) candidates = dynamicModels.slice(0, 5);
+  } else {
+    candidates = [...SAFE_GROQ_MODELS];
+  }
+
+  for (const model of candidates) {
     try {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey.trim()}`
+          'Authorization': `Bearer ${key}`
         },
         body: JSON.stringify({
           model,
@@ -47,10 +129,13 @@ async function callGroq({ prompt, apiKey }) {
         if (content) return content;
       } else {
         const errData = await response.json().catch(() => ({}));
+        const errMsg = errData.error?.message || '';
         if (response.status === 401) {
           throw new Error('Groq API Key không hợp lệ hoặc đã hết hạn.');
         }
-        lastError = new Error(errData.error?.message || `Lỗi Groq model ${model}`);
+        // Model decommissioned/unavailable → skip silently
+        if (isModelUnavailableError(errMsg)) continue;
+        lastError = new Error(errMsg || `Lỗi Groq model ${model}`);
         continue;
       }
     } catch (err) {
@@ -59,7 +144,7 @@ async function callGroq({ prompt, apiKey }) {
     }
   }
 
-  throw lastError || new Error('Không thể kết nối với các mô hình Groq Llama.');
+  throw lastError || new Error('Không thể kết nối với các mô hình Groq.');
 }
 
 async function callGemini({ prompt, apiKey }) {
@@ -152,50 +237,26 @@ async function testApiKey(apiKey, provider = 'auto') {
 
     // 1. Probe Groq models endpoint to validate key quickly
     try {
-      const modelsRes = await fetch('https://api.groq.com/openai/v1/models', {
-        headers: {
-          'Authorization': `Bearer ${key}`
-        }
-      });
-
-      if (!modelsRes.ok) {
-        const errData = await modelsRes.json().catch(() => ({}));
-        if (modelsRes.status === 401) {
-          throw new Error('API Key không chính xác hoặc đã bị vô hiệu hóa trên Groq Cloud.');
-        }
-        if (modelsRes.status === 429) {
-          throw new Error('Groq API Key đã vượt quá giới hạn lượt gọi (Rate Limit).');
-        }
-        throw new Error(errData.error?.message || `Lỗi Groq API (Mã ${modelsRes.status})`);
-      }
-
-      const mData = await modelsRes.json();
-      if (Array.isArray(mData.data)) {
-        availableModels = mData.data
-          .filter(m => m.active !== false &&
-            !m.id.includes('whisper') &&
-            !m.id.includes('tts') &&
-            !m.id.includes('guard') &&
-            !m.id.includes('orpheus') &&
-            !m.id.includes('embed')
-          )
-          .map(m => m.id);
-      }
+      availableModels = await fetchActiveGroqModels(key);
     } catch (err) {
-      if (err.message && (err.message.includes('API Key') || err.message.includes('Rate Limit'))) {
+      if (err.message && err.message.includes('API Key')) {
         throw new Error(`Groq: ${err.message}`);
       }
     }
 
-    // Determine list of active models to test
+    // Determine list of active models to test: safe static first, then dynamic llama
     const candidates = [
       ...SAFE_GROQ_MODELS.filter(m => availableModels.length === 0 || availableModels.includes(m)),
-      ...availableModels.filter(m => m.startsWith('llama-3') || m.startsWith('llama'))
+      ...availableModels.filter(m =>
+        (m.startsWith('llama-3') || m.startsWith('llama')) &&
+        !DECOMMISSIONED_GROQ_MODELS.includes(m) &&
+        !SAFE_GROQ_MODELS.includes(m)
+      )
     ];
-    const modelsToTry = Array.from(new Set(candidates.length > 0 ? candidates : SAFE_GROQ_MODELS));
+    const modelsToTry = candidates.length > 0 ? candidates : SAFE_GROQ_MODELS;
 
-    let lastError = null;
     let workingModel = null;
+    const attemptedErrors = [];
 
     for (const model of modelsToTry) {
       try {
@@ -217,20 +278,24 @@ async function testApiKey(apiKey, provider = 'auto') {
           break;
         } else {
           const errData = await testRes.json().catch(() => ({}));
-          const errMsg = errData.error?.message || `Lỗi với model ${model}`;
+          const errMsg = errData.error?.message || `Mã ${testRes.status}`;
           if (testRes.status === 401) {
             throw new Error('API Key Groq không chính xác hoặc đã hết hạn.');
           }
           if (testRes.status === 429) {
             throw new Error(`Groq: Vượt quá giới hạn lượt gọi (Rate Limit): ${errMsg}`);
           }
-          lastError = new Error(errMsg);
+          // If decommissioned or unavailable, skip silently
+          if (isModelUnavailableError(errMsg)) {
+            continue;
+          }
+          attemptedErrors.push(`[${model}]: ${errMsg}`);
         }
       } catch (err) {
         if (err.message && (err.message.includes('API Key') || err.message.includes('Rate Limit'))) {
           throw err;
         }
-        lastError = err;
+        attemptedErrors.push(`[${model}]: ${err.message}`);
       }
     }
 
@@ -242,7 +307,10 @@ async function testApiKey(apiKey, provider = 'auto') {
         message: `🎉 Kết nối Groq Cloud API thành công! Mô hình ${workingModel} phản hồi siêu tốc.`
       };
     } else {
-      throw new Error(`Groq: ${lastError?.message || 'Không thể xác thực API Key với Groq.'}`);
+      const detailMsg = attemptedErrors.length > 0
+        ? attemptedErrors.join(' | ')
+        : 'Tất cả các mô hình chat đều không khả dụng trên tài khoản này.';
+      throw new Error(`Groq: ${detailMsg}`);
     }
   } else {
     // Test as Gemini
