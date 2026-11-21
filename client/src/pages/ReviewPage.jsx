@@ -49,14 +49,23 @@ function ReviewPage() {
         studentAnswer: selectedAnswer !== null ? selectedAnswer : -1,
         unit: qData.unit || ''
       })
-      setAiExplanations(prev => ({ ...prev, [qIndex]: res.data.explanation }))
+      setAiExplanations(prev => ({
+        ...prev,
+        [qIndex]: {
+          text: res.data.explanation,
+          isAi: res.data.isAi !== false,
+          provider: res.data.provider
+        }
+      }))
       if (res.data.fromCache) {
-        toast.success('⚡ Đã tải lời giải thích (đã lưu sẵn trong CSDL)!')
+        toast.success('⚡ Đã tải lời giải thích từ CSDL!')
+      } else if (res.data.isAi !== false) {
+        toast.success('✨ Trợ lý AI đã phân tích câu hỏi thành công!')
       } else {
-        toast.success('✨ Đã sinh lời giải thích AI và tự động lưu vào CSDL!')
+        toast.info('💡 Đã tải phân tích hướng dẫn đáp án!')
       }
     } catch (err) {
-      toast.error('Không thể tạo giải thích AI lúc này: ' + err.message)
+      toast.error('Không thể tạo giải thích lúc này: ' + err.message)
     } finally {
       setAiLoading(false)
     }
@@ -675,20 +684,24 @@ function ReviewPage() {
                     <div className="p-3 rounded-3 bg-white border border-primary border-opacity-50 small mt-2 shadow-sm">
                       <div className="d-flex align-items-center justify-content-between mb-2">
                         <div className="d-flex align-items-center gap-2 text-primary fw-bold">
-                          <FaRobot size={15} /> Phân Tích Chuyên Sâu Của Trợ Lý AI:
+                          {aiExplanations[currentQIndex]?.isAi === false ? (
+                            <><FaLightbulb size={15} className="text-warning" /> Hướng Dẫn & Phân Tích Đáp Án:</>
+                          ) : (
+                            <><FaRobot size={15} /> Phân Tích Chuyên Sâu Của Trợ Lý AI:</>
+                          )}
                         </div>
                         <button
                           type="button"
                           className={`btn btn-sm ${isSpeaking && speakingType === 'ai_explain' ? 'btn-primary text-white' : 'btn-outline-primary'} py-0 px-2 d-flex align-items-center gap-1`}
                           style={{ fontSize: '0.75rem', borderRadius: '15px' }}
-                          onClick={() => handleSpeakText(aiExplanations[currentQIndex], 'ai_explain')}
-                          title="Nghe phát âm lời giải thích của AI"
+                          onClick={() => handleSpeakText(aiExplanations[currentQIndex]?.text || aiExplanations[currentQIndex], 'ai_explain')}
+                          title="Nghe phát âm lời giải thích"
                         >
                           <FaVolumeUp /> {isSpeaking && speakingType === 'ai_explain' ? 'Dừng đọc' : 'Nghe đọc giải thích'}
                         </button>
                       </div>
                       <div className="text-dark lh-base" style={{ whiteSpace: 'pre-line', fontSize: '0.88rem' }}>
-                        {aiExplanations[currentQIndex]}
+                        {aiExplanations[currentQIndex]?.text || aiExplanations[currentQIndex]}
                       </div>
                     </div>
                   )}

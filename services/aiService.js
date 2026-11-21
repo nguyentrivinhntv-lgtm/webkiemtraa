@@ -202,9 +202,10 @@ HÃY TRÌNH BÀY LỜI GIẢI THEO CẤU TRÚC 3 PHẦN (100% TIẾNG VIỆT):
 📌 **Mẹo ghi nhớ nhanh:** [Từ khóa cốt lõi hoặc quy tắc ngắn gọn giúp ghi nhớ nhanh]`;
 
   if (key) {
-    const isGroq = provider === 'groq' || (provider === 'auto' && (key.startsWith('gsk_') || (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim() === key)));
+    const isGroq = key.startsWith('gsk_') || provider === 'groq';
+    const isGemini = key.startsWith('AIza') || provider === 'gemini';
 
-    // 1. Thử Groq
+    // 1. Thử Groq (nếu là Groq Key hoặc provider là Groq)
     if (isGroq) {
       try {
         const text = await callGroq({ prompt, apiKey: key });
@@ -220,35 +221,44 @@ HÃY TRÌNH BÀY LỜI GIẢI THEO CẤU TRÚC 3 PHẦN (100% TIẾNG VIỆT):
         aiError = err.message;
       }
     }
-
-    // 2. Thử Gemini
-    try {
-      const text = await callGemini({ prompt, apiKey: key });
-      if (text) {
-        return {
-          explanation: text,
-          isAi: true,
-          provider: 'gemini'
-        };
+    // 2. Thử Gemini (chỉ khi là Gemini Key hoặc provider là Gemini)
+    else if (isGemini) {
+      try {
+        const text = await callGemini({ prompt, apiKey: key });
+        if (text) {
+          return {
+            explanation: text,
+            isAi: true,
+            provider: 'gemini'
+          };
+        }
+      } catch (err) {
+        console.warn('Gemini API call failed:', err.message);
+        aiError = err.message;
       }
-    } catch (err) {
-      console.warn('Gemini API call failed:', err.message);
-      if (!aiError) aiError = err.message;
+    }
+    // 3. Nếu là key chung hoặc server env
+    else {
+      if (process.env.GROQ_API_KEY) {
+        try {
+          const text = await callGroq({ prompt, apiKey: process.env.GROQ_API_KEY });
+          if (text) return { explanation: text, isAi: true, provider: 'groq' };
+        } catch (e) {}
+      }
+      if (process.env.GEMINI_API_KEY) {
+        try {
+          const text = await callGemini({ prompt, apiKey: process.env.GEMINI_API_KEY });
+          if (text) return { explanation: text, isAi: true, provider: 'gemini' };
+        } catch (e) {}
+      }
     }
   }
 
-  // 3. Fallback sang bộ phân tích tích hợp (Offline)
+  // 3. Fallback sang bộ phân tích tích hợp (Offline) - Trả về phân tích sạch sẽ, KHÔNG chèn thông báo lỗi
   const ruleExplanation = generateRuleBasedExplanation({ question, options, correctAnswer, studentAnswer, unit, quizTitle });
-  const notice = aiError
-    ? `> ⚠️ *Lưu ý: Không thể kết nối với Trợ lý AI (${aiError}). Dưới đây là phân tích tự động từ hệ thống:*
-
-`
-    : (!key ? `> 💡 *Lưu ý: Chưa cấu hình API Key cá nhân trong Hồ sơ. Dưới đây là phân tích tự động từ hệ thống:*
-
-` : '');
 
   return {
-    explanation: notice + ruleExplanation,
+    explanation: ruleExplanation,
     isAi: false,
     provider: 'offline',
     reason: aiError || (key ? 'AI không phản hồi' : 'Chưa cấu hình API Key')
